@@ -2,7 +2,13 @@ pipeline {
     agent any
 
     environment {
+        CI = 'true'
         NODE_VERSION = '24'
+    }
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
     }
 
     stages {
@@ -16,57 +22,44 @@ pipeline {
         stage('Environment') {
             steps {
                 sh '''
-                    echo "Node:"
+                    echo "===== Environment ====="
                     node --version
-
-                    echo "NPM:"
                     npm --version
-
-                    echo "Git:"
                     git --version
+                    echo "Branch: ${BRANCH_NAME}"
+                    echo "Commit: ${GIT_COMMIT}"
                 '''
             }
         }
 
-        stage('OpenEMR UI - Install') {
+        stage('New UI - Install') {
             steps {
-                sh '''
-                    npm ci
-                '''
+                dir('interface/new') {
+                    sh 'npm ci'
+                }
             }
         }
 
-        stage('OpenEMR UI - Lint') {
+        stage('New UI - Test') {
             steps {
-                sh '''
-                    npm run lint:js
-                    npm run stylelint
-                '''
+                dir('interface/new') {
+                    sh 'npm run test -- --run'
+                }
             }
         }
 
-        stage('OpenEMR UI - Tests') {
+        stage('New UI - Build') {
             steps {
-                sh '''
-                    npm run test:js -- --runInBand
-                '''
-            }
-        }
-
-        stage('OpenEMR UI - Build') {
-            steps {
-                sh '''
-                    npm run build
-                '''
+                dir('interface/new') {
+                    sh 'npm run build'
+                }
             }
         }
 
         stage('Backend - Install') {
             steps {
                 dir('backend') {
-                    sh '''
-                        npm ci
-                    '''
+                    sh 'npm ci'
                 }
             }
         }
@@ -74,9 +67,7 @@ pipeline {
         stage('Backend - Lint') {
             steps {
                 dir('backend') {
-                    sh '''
-                        npx eslint "{src,apps,libs,test}/**/*.ts"
-                    '''
+                    sh 'npx eslint "{src,apps,libs,test}/**/*.ts"'
                 }
             }
         }
@@ -84,9 +75,7 @@ pipeline {
         stage('Backend - Unit Tests') {
             steps {
                 dir('backend') {
-                    sh '''
-                        npm test -- --runInBand
-                    '''
+                    sh 'npm test -- --runInBand'
                 }
             }
         }
@@ -94,9 +83,7 @@ pipeline {
         stage('Backend - Build') {
             steps {
                 dir('backend') {
-                    sh '''
-                        npm run build
-                    '''
+                    sh 'npm run build'
                 }
             }
         }
@@ -105,20 +92,22 @@ pipeline {
     post {
         success {
             echo '======================================'
-            echo ' OpenEMR DEVELOPER CI PASSED'
+            echo ' OPENEMR DEVELOPER CI PASSED'
             echo '======================================'
         }
 
         failure {
             echo '======================================'
-            echo ' OpenEMR DEVELOPER CI FAILED'
+            echo ' OPENEMR DEVELOPER CI FAILED'
             echo '======================================'
         }
 
         always {
-            echo "Build: ${env.BUILD_NUMBER}"
-            echo "Branch: ${env.BRANCH_NAME}"
-            echo "Commit: ${env.GIT_COMMIT}"
+            echo '======================================'
+            echo "Build: ${BUILD_NUMBER}"
+            echo "Branch: ${BRANCH_NAME}"
+            echo "Commit: ${GIT_COMMIT}"
+            echo '======================================'
         }
     }
 }
