@@ -1,0 +1,17 @@
+{
+  "name": "openrx-training-videos",
+  "version": "1.0.0",
+  "description": "Playwright-based training video recorder for OpenRx",
+  "scripts": {
+    "record": "node record-all.js",
+    "record:single": "node record-all.js --feature=",
+    "upload": "node upload-videos.js",
+    "record-and-upload": "node record-all.js && node upload-videos.js"
+  },
+  "keywords": ["training", "videos", "playwright", "openrx"],
+  "author": "OpenRx",
+  "license": "UNLICENSED",
+  "dependencies": {
+    "playwright": "^1.61.1"
+  }
+}

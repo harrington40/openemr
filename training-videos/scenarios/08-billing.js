@@ -1,0 +1,19 @@
+/**
+ * Billing — training video recording.
+ */
+const R = require('../recorder-base');
+
+(async () => {
+  const { browser, context, page } = await R.startRecording('08-billing');
+  try {
+    await R.login(page);
+    await R.goTo(page, '/billing', 'Billing Dashboard');
+    await R.pause(1500);
+    await R.scrollDown(page, 300);
+    console.log('✅ Billing recording complete');
+  } catch (err) {
+    console.error('❌ Error:', err.message);
+  } finally {
+    await R.finish(browser, context);
+  }
+})();

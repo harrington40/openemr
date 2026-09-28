@@ -1,0 +1,38 @@
+/* Import Bootstrap 5 (icons loaded in main.tsx) */
+@import 'bootstrap/dist/css/bootstrap.min.css';
+
+/* Global overrides for OpenEMR */
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    'Noto Sans', 'Liberation Sans', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Ensure full height layout */
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Smooth transitions for sidebar */
+.nav-link {
+  transition: background-color 0.15s ease-in-out;
+}
+
+/* Card hover effect for stats */
+.card.text-bg-primary,
+.card.text-bg-success,
+.card.text-bg-warning,
+.card.text-bg-info {
+  transition: transform 0.15s ease-in-out;
+}
+
+.card.text-bg-primary:hover,
+.card.text-bg-success:hover,
+.card.text-bg-warning:hover,
+.card.text-bg-info:hover {
+  transform: translateY(-2px);
+}

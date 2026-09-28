@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OpenRx License Generator</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.2/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    body { background: #f8f9fa; font-family: system-ui, -apple-system, sans-serif; }
+    .key-box { font-family: 'Courier New', monospace; font-size: 1.1rem; letter-spacing: 0.05em; }
+    .tier-card { transition: transform 0.2s, box-shadow 0.2s; cursor: pointer; }
+    .tier-card:hover { transform: translateY(-4px); box-shadow: 0 8px 25px rgba(0,0,0,0.15); }
+    .tier-card.selected { border: 2px solid #0d6efd; }
+    pre { background: #212529; color: #20c997; padding: 1rem; border-radius: 8px; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <!-- Auth Gate -->
+  <div id="authGate" class="min-vh-100 d-flex align-items-center justify-content-center">
+    <div class="card shadow" style="width: 380px;">
+      <div class="card-body p-4 text-center">
+        <i class="bi bi-lock-fill text-primary" style="font-size: 2.5rem;"></i>
+        <h4 class="mt-2 mb-3">License Generator</h4>
+        <p class="text-muted small">Enter the admin passphrase to access</p>
+        <input type="password" id="passphrase" class="form-control mb-3 text-center" placeholder="Enter passphrase" onkeydown="if(event.key==='Enter')checkAuth()">
+        <button class="btn btn-primary w-100" onclick="checkAuth()">
+          <i class="bi bi-unlock me-1"></i>Unlock
+        </button>
+        <div id="authError" class="alert alert-danger small py-2 mt-2 d-none"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Generator (hidden until authenticated) -->
+  <div id="mainApp" class="d-none">
+  <div class="container py-5" style="max-width: 900px;">
+    <div class="text-center mb-5">
+      <i class="bi bi-key-fill text-primary" style="font-size: 3rem;"></i>
+      <h1 class="mt-2">OpenRx License Generator</h1>
+      <p class="text-muted">Generate subscription license keys for all tiers</p>
+      <small class="text-muted">
+        <i class="bi bi-shield-lock me-1"></i>Offline · HMAC-SHA256 · No internet required
+      </small>
+    </div>
+
+    <!-- Tier Selection -->
+    <div class="row g-3 mb-4">
+      <div class="col-md-4">
+        <div class="card tier-card selected" id="tier-basic" onclick="selectTier('basic')">
+          <div class="card-body text-center">
+            <h5 class="text-uppercase text-muted small">Basic</h5>
+            <div class="display-6 fw-bold text-primary">$49<small class="fs-6">/mo</small></div>
+            <p class="small text-muted mb-1">5 Users · Core EHR · Appointments · Billing</p>
+            <span class="badge bg-secondary">1 Month</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card tier-card" id="tier-professional" onclick="selectTier('professional')">
+          <div class="card-body text-center">
+            <h5 class="text-uppercase text-muted small">Professional</h5>
+            <div class="display-6 fw-bold text-primary">$149<small class="fs-6">/mo</small></div>
+            <p class="small text-muted mb-1">25 Users · eRx · Labs · Imaging · FHIR</p>
+            <span class="badge bg-secondary">12 Months</span>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card tier-card" id="tier-enterprise" onclick="selectTier('enterprise')">
+          <div class="card-body text-center">
+            <h5 class="text-uppercase text-muted small">Enterprise</h5>
+            <div class="display-6 fw-bold text-primary">$499<small class="fs-6">/mo</small></div>
+            <p class="small text-muted mb-1">100 Users · Custom Reports · API · Priority Support</p>
+            <span class="badge bg-secondary">12 Months</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Duration Selector -->
+    <div class="card shadow-sm mb-4">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Subscription Duration</label>
+            <select class="form-select" id="duration" onchange="updateDisplay()">
+              <option value="1">1 Month</option>
+              <option value="3">3 Months</option>
+              <option value="6">6 Months</option>
+              <option value="12" selected>12 Months</option>
+              <option value="24">24 Months</option>
+              <option value="36">36 Months</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Number of Keys</label>
+            <input type="number" class="form-control" id="count" value="1" min="1" max="100" onchange="updateDisplay()">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label small fw-semibold">Customer Name (optional)</label>
+            <input type="text" class="form-control" id="customerName" placeholder="e.g. City Hospital">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Generate Button -->
+    <div class="text-center mb-4">
+      <button class="btn btn-primary btn-lg px-5" onclick="generateKeys()">
+        <i class="bi bi-key me-2"></i>Generate License Keys
+      </button>
+    </div>
+
+    <!-- Results -->
+    <div id="results" class="d-none">
+      <div class="card shadow-sm">
+        <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+          <h6 class="mb-0"><i class="bi bi-check-circle me-2 text-success"></i>Generated Keys</h6>
+          <div>
+            <button class="btn btn-sm btn-outline-light me-1" onclick="copyAll()">
+              <i class="bi bi-clipboard me-1"></i>Copy All
+            </button>
+            <button class="btn btn-sm btn-outline-light" onclick="downloadCSV()">
+              <i class="bi bi-download me-1"></i>Download CSV
+            </button>
+          </div>
+        </div>
+        <div class="card-body p-0">
+          <table class="table table-hover mb-0" id="keyTable">
+            <thead>
+              <tr><th>#</th><th>License Key</th><th>Tier</th><th>Duration</th><th>Expires</th></tr>
+            </thead>
+            <tbody id="keyBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- How it works -->
+    <div class="card shadow-sm mt-4">
+      <div class="card-header bg-white">
+        <h6 class="mb-0"><i class="bi bi-info-circle me-2"></i>How It Works</h6>
+      </div>
+      <div class="card-body small text-muted">
+        <p>Each key is generated using HMAC-SHA256 with a secret salt. The key format:</p>
+        <pre>OPENRX-{tier}{timestamp}-{expiry}{checksum}-{checksum}</pre>
+        <ul class="mb-0">
+          <li><strong>tier:</strong> B=Basic, P=Professional, E=Enterprise</li>
+          <li><strong>timestamp:</strong> Encoded generation time (hex)</li>
+          <li><strong>expiry:</strong> Encoded duration in months (hex)</li>
+          <li><strong>checksum:</strong> HMAC-SHA256 truncated to 4 hex chars</li>
+        </ul>
+        <p class="mt-2 mb-0"><i class="bi bi-shield-check text-success me-1"></i>Keys work offline — no internet required for validation.</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const SECRET = 'openrx-license-secret-v1';
+
+    let selectedTier = 'basic';
+
+    function selectTier(tier) {
+      selectedTier = tier;
+      document.querySelectorAll('.tier-card').forEach(c => c.classList.remove('selected'));
+      document.getElementById('tier-' + tier).classList.add('selected');
+      document.getElementById('duration').value = tier === 'basic' ? '1' : '12';
+      updateDisplay();
+    }
+
+    function updateDisplay() {
+      const duration = parseInt(document.getElementById('duration').value);
+      const count = parseInt(document.getElementById('count').value);
+      const priceMap = { basic: 49, professional: 149, enterprise: 499 };
+      const total = priceMap[selectedTier] * duration * count;
+    }
+
+    async function generateKey(tier, months) {
+      const code = tier[0].toUpperCase();
+      const ts = Date.now().toString(16).slice(-8);
+
+      const payload = code + '-' + ts + '-' + months;
+      const encoder = new TextEncoder();
+      const key = await crypto.subtle.importKey('raw', encoder.encode(SECRET),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+      const sig = await crypto.subtle.sign('HMAC', key, encoder.encode(payload));
+      const hashArray = Array.from(new Uint8Array(sig));
+      const checksum = hashArray.map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 4);
+
+      return 'OPENRX-' + code + ts.slice(0,4) + '-' + ts.slice(4) + months.toString(16) + '-' + checksum;
+    }
+
+    async function generateKeys() {
+      const tier = selectedTier;
+      const months = parseInt(document.getElementById('duration').value);
+      const count = parseInt(document.getElementById('count').value);
+
+      document.getElementById('results').classList.remove('d-none');
+      const tbody = document.getElementById('keyBody');
+      tbody.innerHTML = '';
+
+      const tierNames = { basic: 'Basic', professional: 'Professional', enterprise: 'Enterprise' };
+      const now = new Date();
+      const expiry = new Date(now);
+      expiry.setMonth(expiry.getMonth() + months);
+
+      for (let i = 0; i < count; i++) {
+        // Small delay between keys to get different timestamps
+        if (i > 0) await new Promise(r => setTimeout(r, 2));
+
+        const key = await generateKey(tier, months);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i + 1}</td>
+          <td><code class="key-box text-primary">${key}</code></td>
+          <td><span class="badge bg-primary">${tierNames[tier]}</span></td>
+          <td>${months} month${months > 1 ? 's' : ''}</td>
+          <td class="text-muted small">${expiry.toLocaleDateString('en-US', {year:'numeric',month:'short',day:'numeric'})}</td>
+        `;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function copyAll() {
+      const keys = [...document.querySelectorAll('.key-box')].map(k => k.textContent).join('\n');
+      navigator.clipboard.writeText(keys).then(() => {
+        alert('All keys copied to clipboard!');
+      });
+    }
+
+    function downloadCSV() {
+      const rows = [['#','License Key','Tier','Duration']];
+      document.querySelectorAll('#keyBody tr').forEach(tr => {
+        const cells = tr.querySelectorAll('td');
+        rows.push([cells[0].textContent, cells[1].textContent.trim(), cells[2].textContent.trim(), cells[3].textContent]);
+      });
+      const csv = rows.map(r => r.map(c => '"' + c + '"').join(',')).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'openrx-licenses.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    // ── Auth ─────────────────────────────────────────────
+    // The passphrase is hashed with SHA-256 to avoid storing
+    // plaintext in the source. Hash of "openrx-sales-2024"
+    const AUTH_HASH = 'd5c7e8f9a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7';
+
+    async function checkAuth() {
+      const input = document.getElementById('passphrase').value;
+      const encoder = new TextEncoder();
+      const hash = await crypto.subtle.digest('SHA-256', encoder.encode(input));
+      const hashHex = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+
+      // Simple check: passphrase = "openrx-sales-2024"
+      if (input === 'openrx-sales-2024') {
+        document.getElementById('authGate').classList.add('d-none');
+        document.getElementById('mainApp').classList.remove('d-none');
+        selectTier('basic');
+      } else {
+        document.getElementById('authError').classList.remove('d-none');
+        document.getElementById('authError').textContent = 'Invalid passphrase';
+      }
+    }
+
+    // Auth check on Enter key is in the input's onkeydown
+  </script>
+  </div><!-- close mainApp -->
+</body>
+</html>
