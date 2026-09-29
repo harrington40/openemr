@@ -194,7 +194,11 @@ pipeline {
                     set -e
 
                     echo "Rebuilding the $TEST_DB_NAME schema from repository assets"
-                    ./test-db/setup-test-db.sh
+
+                    # Invoked through `bash` on purpose: this repository has
+                    # core.fileMode=false, so the executable bit is not reliable
+                    # in checkouts.
+                    bash ./test-db/setup-test-db.sh
                 '''
             }
         }

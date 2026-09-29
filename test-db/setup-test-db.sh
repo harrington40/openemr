@@ -119,6 +119,6 @@ cat <<EOF
 
   Next:
     cp backend/.env.test.example backend/.env.test
-    ./test-db/run-backend-against-test-db.sh   # boot locally on :3202
+    bash ./test-db/run-backend-against-test-db.sh   # boot locally on :3202
 
 EOF

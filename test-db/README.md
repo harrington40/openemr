@@ -4,9 +4,14 @@ A throwaway database for CI and local integration testing, built from
 repository assets. Tests never read production rows.
 
 ```bash
-./test-db/setup-test-db.sh                       # create / recreate + seed
-./test-db/run-backend-against-test-db.sh         # boot backend on :3202
+bash ./test-db/setup-test-db.sh                    # create / recreate + seed
+bash ./test-db/run-backend-against-test-db.sh      # boot backend on :3202
 ```
+
+The scripts are called through `bash` on purpose. This repository has
+`core.fileMode=false` (it is developed on a Windows mount), so Git does not
+record the executable bit and a fresh checkout will hand you a *non-executable*
+script. Calling `bash <script>` avoids relying on the mode bit.
 
 ## Should we snapshot the production database?
 
@@ -86,7 +91,7 @@ For this development machine the containerised MariaDB listens on **8320**:
 
 ```bash
 DB_HOST=127.0.0.1 DB_PORT=8320 DB_ADMIN_USER=root DB_ADMIN_PASSWORD=root \
-    ./test-db/setup-test-db.sh
+    bash ./test-db/setup-test-db.sh
 ```
 
 ## Seeded credentials (test-only)

@@ -58,7 +58,8 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y -qq default-mysql-client
           }
-          ./test-db/setup-test-db.sh
+          # Via `bash`: core.fileMode=false here, so the exec bit is unreliable.
+          bash ./test-db/setup-test-db.sh
 
       - name: Run unit tests
         run: npm test -- --runInBand
@@ -122,7 +123,8 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y -qq default-mysql-client
           }
-          ./test-db/setup-test-db.sh
+          # Via `bash`: core.fileMode=false here, so the exec bit is unreliable.
+          bash ./test-db/setup-test-db.sh
 
       - name: Install backend dependencies and build
         working-directory: backend
