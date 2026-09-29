@@ -17,6 +17,21 @@ jobs:
       run:
         working-directory: backend
 
+    # Tests run against a disposable schema built from repository assets; see
+    # test-db/. Production is never contacted.
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="/usr/local/bin/healthcheck.sh --su-mysql --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -31,6 +46,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Provision test database
+        working-directory: .
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_ADMIN_USER: root
+          DB_ADMIN_PASSWORD: root
+        run: |
+          command -v mysql >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq default-mysql-client
+          }
+          ./test-db/setup-test-db.sh
+
       - name: Run unit tests
         run: npm test -- --runInBand
 
@@ -38,20 +67,68 @@ jobs:
         run: npm run build
 
       - name: Run E2E tests
-        run: npm run test:e2e
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_USERNAME: openrx_test
+          DB_PASSWORD: openrx_test
+          DB_DATABASE: openrx_test
+          DB_LOGGING: "false"
+        # --forceExit: the MySQL pool and the socket.io gateway keep the event
+        # loop alive, so Jest would otherwise never exit.
+        run: npm run test:e2e -- --forceExit
 
   api-tests:
     name: API Tests
     runs-on: ubuntu-latest
 
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="/usr/local/bin/healthcheck.sh --su-mysql --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=12
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Provision test database
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_ADMIN_USER: root
+          DB_ADMIN_PASSWORD: root
+        run: |
+          command -v mysql >/dev/null || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq default-mysql-client
+          }
+          ./test-db/setup-test-db.sh
+
+      - name: Install backend dependencies and build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
 
       - name: Install API test dependencies
         working-directory: tests/api-tests
@@ -63,10 +140,84 @@ jobs:
             pip install pytest requests
           fi
 
-      - name: Run API tests
-        working-directory: tests/api-tests
+      - name: Run API tests against the test database
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: "3306"
+          DB_USERNAME: openrx_test
+          DB_PASSWORD: openrx_test
+          DB_DATABASE: openrx_test
+          DB_LOGGING: "false"
+          TEST_API_PORT: "3202"
         run: |
-          pytest -v --junitxml=pytest-results.xml
+          set -e
+
+          BACKEND_LOG="$RUNNER_TEMP/backend.log"
+          BACKEND_PID=""
+
+          cleanup() {
+            [ -n "$BACKEND_PID" ] && kill "$BACKEND_PID" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          echo "Booting the backend against $DB_DATABASE on :$TEST_API_PORT"
+          (
+            cd backend
+            PORT="$TEST_API_PORT" \
+            DB_HOST="$DB_HOST" \
+            DB_PORT="$DB_PORT" \
+            DB_USERNAME="$DB_USERNAME" \
+            DB_PASSWORD="$DB_PASSWORD" \
+            DB_DATABASE="$DB_DATABASE" \
+            DB_LOGGING=false \
+            nohup node dist/main.js > "$BACKEND_LOG" 2>&1 &
+            echo $! > "$RUNNER_TEMP/backend.pid"
+          )
+          BACKEND_PID="$(cat "$RUNNER_TEMP/backend.pid")"
+
+          API_URL="http://localhost:$TEST_API_PORT/api"
+
+          echo "Waiting for $API_URL/config ..."
+          for i in $(seq 1 60); do
+            if curl -fsS "$API_URL/config" >/dev/null 2>&1; then
+              echo "Backend is up after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 60 ]; then
+              echo "Backend failed to start; last log lines:"
+              tail -40 "$BACKEND_LOG"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if grep -qi 'error' "$BACKEND_LOG"; then
+            echo "Backend logged errors during startup:"
+            grep -i 'error' "$BACKEND_LOG" | head -20
+            exit 1
+          fi
+
+          TOKEN="$(python3 - <<'PY'
+          import json, os, urllib.request
+          req = urllib.request.Request(
+              f"http://localhost:{os.environ['TEST_API_PORT']}/api/auth/login",
+              data=json.dumps(
+                  {"username": "admin", "password": "OpenRxTest123"}
+              ).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          print(json.load(urllib.request.urlopen(req, timeout=20))["token"])
+          PY
+          )"
+
+          cd tests/api-tests
+          OPENRX_API_URL="$API_URL" \
+          OPENRX_API_TOKEN="$TOKEN" \
+          OPENRX_TEST_PATIENT_ID=1 \
+          OPENRX_TEST_APPOINTMENT_ID=1 \
+          OPENRX_TEST_PROVIDER_ID=2 \
+          OPENRX_TEST_ADMIN_USER_ID=1 \
+          python3 -m pytest -v --junitxml=pytest-results.xml
 
       - name: Publish API test results
         if: always()
