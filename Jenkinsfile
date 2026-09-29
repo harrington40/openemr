@@ -23,23 +23,23 @@ pipeline {
          * Override these in the Jenkins job (or with credentials bindings) when
          * the MariaDB instance is not on localhost.
          */
-        DB_HOST = '127.0.0.1'
-        DB_PORT = '3306'
-        DB_ADMIN_USER = 'root'
-        DB_ADMIN_PASSWORD = 'root'
-        TEST_DB_NAME = 'openrx_test'
-        TEST_DB_USER = 'openrx_test'
-        TEST_DB_PASSWORD = 'openrx_test'
-        TEST_API_PORT = '3202'
-
-        /*
-         * Set TEST_DB_USE_DOCKER=true to have the pipeline start a disposable
-         * MariaDB container for the run instead of using a server that is
-         * already installed on the agent. Override TEST_DB_PORT when the
-         * default collides with an existing database.
-         */
-        TEST_DB_USE_DOCKER = 'false'
-        TEST_DB_CONTAINER = 'openrx-test-db'
+        // Each value keeps an existing value if one is already set, so these
+        // can be overridden from the Jenkins job configuration
+        // (Configure > Environment variables) without editing this file.
+        // Declarative `environment` otherwise overwrites job-level variables.
+        DB_HOST = "${env.DB_HOST ?: '127.0.0.1'}"
+        DB_PORT = "${env.DB_PORT ?: '3306'}"
+        DB_SOCKET = "${env.DB_SOCKET ?: ''}"
+        DB_ADMIN_USER = "${env.DB_ADMIN_USER ?: 'root'}"
+        DB_ADMIN_PASSWORD = "${env.DB_ADMIN_PASSWORD ?: 'root'}"
+        TEST_DB_NAME = "${env.TEST_DB_NAME ?: 'openrx_test'}"
+        TEST_DB_USER = "${env.TEST_DB_USER ?: 'openrx_test'}"
+        TEST_DB_PASSWORD = "${env.TEST_DB_PASSWORD ?: 'openrx_test'}"
+        TEST_API_PORT = "${env.TEST_API_PORT ?: '3202'}"
+        // Set TEST_DB_USE_DOCKER=true when the agent has no MariaDB: the
+        // pipeline then starts and provisions a disposable container.
+        TEST_DB_USE_DOCKER = "${env.TEST_DB_USE_DOCKER ?: 'false'}"
+        TEST_DB_CONTAINER = "${env.TEST_DB_CONTAINER ?: 'openrx-test-db'}"
     }
 
     stages {

@@ -90,6 +90,7 @@ cannot miss it. `patches.sql` is the explicit, versioned record until then.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `3306` | MariaDB to provision on |
+| `DB_SOCKET` | *(unset)* | Connect over this unix socket instead of TCP |
 | `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` | `root` / `root` | Used to create the schema and grants |
 | `TEST_DB_NAME` | `openrx_test` | Test schema |
 | `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` | Restricted runtime user |
@@ -102,6 +103,32 @@ For this development machine the containerised MariaDB listens on **8320**:
 DB_HOST=127.0.0.1 DB_PORT=8320 DB_ADMIN_USER=root DB_ADMIN_PASSWORD=root \
     bash ./test-db/setup-test-db.sh
 ```
+
+### Which database should Jenkins use?
+
+The pipeline defaults to `tcp 127.0.0.1:3306` as `root`, which is not true
+everywhere. Run this **on the Jenkins agent** to find out which case applies:
+
+```bash
+ss -ltnp 2>/dev/null | grep -E ':3306|:3307' || echo 'no sql server listening'
+ls -l /run/mysqld/mysqld.sock 2>/dev/null || echo 'no local socket'
+docker --version  2>/dev/null || echo 'no docker'
+python3 --version 2>/dev/null || echo 'no python3'
+```
+
+| What the agent shows | Set in the Jenkins job |
+| --- | --- |
+| Nothing listening, but `docker` works | `TEST_DB_USE_DOCKER=true` — the pipeline starts its own MariaDB |
+| Nothing listening and no `docker` | Install MariaDB on the agent (`apt-get install -y mariadb-server`) |
+| Listening on 3306 and root works over TCP | `DB_HOST` / `DB_PORT` / `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` |
+| Listening, but TCP says `Access denied` for root | `DB_SOCKET=/run/mysqld/mysqld.sock` (root is socket-auth only) |
+
+Set these in **Job → Configure → Environment variables**. The pipeline reads any
+value that is already set and only falls back to its own default, so no
+Jenkinsfile edit is needed.
+
+The provisioning step prints the raw driver error (`ECONNREFUSED` versus
+`Access denied`) so the build log tells you which row of that table you are in.
 
 ## Seeded credentials (test-only)
 

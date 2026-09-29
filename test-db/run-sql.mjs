@@ -8,11 +8,12 @@
  * script needs no extra installation step and no host client at all.
  *
  * Usage:
- *   node run-sql.mjs --host H --port P --user U --password PW \
+ *   node run-sql.mjs (--host H --port P | --socket S) --user U [--password PW] \
  *        [--database DB] (--file FILE... | --execute SQL...) [--print] [--quiet]
  *
- * Every statement is sent over TCP, so the same invocation works whether the
- * MariaDB is on the host or in a container.
+ * --socket matters for a distribution-packaged MariaDB: its `root` account is
+ * often restricted to the local unix socket, so an administrative connection
+ * over TCP fails with "Access denied" even though the server is running.
  */
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -31,6 +32,9 @@ function parseArguments(argv) {
         switch (flag) {
             case '--host':
                 options.host = argv[++index];
+                break;
+            case '--socket':
+                options.socketPath = argv[++index];
                 break;
             case '--port':
                 options.port = Number(argv[++index]);
@@ -61,8 +65,12 @@ function parseArguments(argv) {
         }
     }
 
-    if (!options.host || !options.user) {
-        throw new Error('--host and --user are required');
+    if (!options.user) {
+        throw new Error('--user is required');
+    }
+
+    if (!options.host && !options.socketPath) {
+        throw new Error('either --host or --socket is required');
     }
 
     return options;
@@ -86,8 +94,10 @@ async function main() {
     const options = parseArguments(process.argv.slice(2));
 
     const connection = await mysql.createConnection({
-        host: options.host,
-        port: options.port || 3306,
+        // socketPath and host are mutually exclusive in mysql2.
+        ...(options.socketPath
+            ? { socketPath: options.socketPath }
+            : { host: options.host, port: options.port || 3306 }),
         user: options.user,
         password: options.password,
         database: options.database,

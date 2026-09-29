@@ -26,6 +26,8 @@
 #
 # Environment overrides:
 #   DB_HOST DB_PORT                   server host/port (default localhost:3306)
+#   DB_SOCKET                         connect over this unix socket instead of
+#                                     TCP; needed when root is socket-auth only
 #   DB_ADMIN_USER DB_ADMIN_PASSWORD   may CREATE DATABASE and GRANT (root/root)
 #   TEST_DB_NAME                      default openrx_test
 #   TEST_DB_USER TEST_DB_PASSWORD     default openrx_test / openrx_test
@@ -38,6 +40,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 DB_HOST="${DB_HOST:-127.0.0.1}"
 DB_PORT="${DB_PORT:-3306}"
+# Connect over the local unix socket instead of TCP. Needed when root is
+# restricted to socket authentication, which is the default for a
+# distribution-packaged MariaDB.
+DB_SOCKET="${DB_SOCKET:-}"
 DB_ADMIN_USER="${DB_ADMIN_USER:-root}"
 DB_ADMIN_PASSWORD="${DB_ADMIN_PASSWORD:-root}"
 
@@ -71,7 +77,12 @@ run_sql() {
     local user="$1" password="$2" database="$3"
     shift 3
 
-    local args=(--host "$DB_HOST" --port "$DB_PORT" --user "$user" --password "$password")
+    local args=(--user "$user" --password "$password")
+    if [[ -n "$DB_SOCKET" ]]; then
+        args+=(--socket "$DB_SOCKET")
+    else
+        args+=(--host "$DB_HOST" --port "$DB_PORT")
+    fi
     [[ "$database" != "-" ]] && args+=(--database "$database")
 
     node "$RUN_SQL" "${args[@]}" "$@"
@@ -97,6 +108,7 @@ if [[ "$USE_DOCKER" -eq 1 ]]; then
 
     DB_HOST="127.0.0.1"
     DB_ADMIN_USER="root"
+    DB_SOCKET=""   # the container is reached over TCP
 
     log "Starting disposable $TEST_DB_IMAGE as '$TEST_DB_CONTAINER' on :$DB_PORT"
     docker rm -f "$TEST_DB_CONTAINER" >/dev/null 2>&1 || true
@@ -131,12 +143,23 @@ if [[ "$USE_DOCKER" -eq 1 ]]; then
     ok "container ready on $DB_HOST:$DB_PORT"
 fi
 
-# Reachability check, so a bad host/credential gives a clear message rather
-# than a raw driver stack trace.
-if ! run_sql "$DB_ADMIN_USER" "$DB_ADMIN_PASSWORD" - \
-        --execute "SELECT 1" --quiet >/dev/null 2>&1; then
-    fail "cannot connect to MariaDB at $DB_HOST:$DB_PORT as '$DB_ADMIN_USER'.
-       Set DB_HOST/DB_PORT/DB_ADMIN_USER/DB_ADMIN_PASSWORD, or re-run with --docker."
+SQL_TARGET="tcp $DB_HOST:$DB_PORT"
+[[ -n "$DB_SOCKET" ]] && SQL_TARGET="socket $DB_SOCKET"
+
+# Reachability check. The underlying driver error is echoed verbatim: "Access
+# denied" (server up, credentials wrong or restricted to socket auth) and
+# "ECONNREFUSED" (nothing listening) need completely different fixes, and
+# hiding that distinction makes the failure impossible to act on.
+if ! connect_error="$(run_sql "$DB_ADMIN_USER" "$DB_ADMIN_PASSWORD" - \
+        --execute "SELECT 1" --quiet 2>&1 >/dev/null)"; then
+    {
+        printf '\033[0;31m   [fail]\033[0m cannot connect to MariaDB (%s) as '\''%s'\'':\n' \
+            "$SQL_TARGET" "$DB_ADMIN_USER"
+        printf '          %s\n' "$connect_error"
+        printf '          Set DB_HOST/DB_PORT/DB_SOCKET/DB_ADMIN_USER/DB_ADMIN_PASSWORD,\n'
+        printf '          or re-run with --docker to start a disposable server.\n'
+    } >&2
+    exit 1
 fi
 
 # --- 1. Database + restricted user ------------------------------------------
