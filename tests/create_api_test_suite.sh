@@ -3,7 +3,17 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/api-tests" && pwd)"
 
-mkdir -p "$ROOT"/{auth,patients,appointments,emergency,clinical,labs,billing,inventory,messaging,pharmacy,providers,administration,smart,system}
+# This script bootstraps the suite from scratch. It used to overwrite every
+# file it knows about, which would silently revert later work in conftest.py,
+# pytest.ini and the per-domain tests. Refuse to run on an initialised suite
+# unless --force is passed.
+if [ -f "$ROOT/conftest.py" ] && [ "${1:-}" != "--force" ]; then
+    echo "tests/api-tests is already initialised." >&2
+    echo "Pass --force to regenerate and overwrite the existing suite." >&2
+    exit 1
+fi
+
+mkdir -p "$ROOT"/{auth,patients,appointments,emergency,clinical,labs,billing,inventory,messaging,pharmacy,providers,administration,smart,system,bookings,ccda,documents,encounters,fda,fhir,imaging,inpatient,labreports,license,mailbox,midwife,notifications,nursing,patient-chat,portal,reference,referrals,reports,avatars}
 
 cat > "$ROOT/pytest.ini" <<'PYEOF'
 [pytest]

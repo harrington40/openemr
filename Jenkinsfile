@@ -11,6 +11,26 @@ pipeline {
 
     environment {
         NODE_VERSION = '24'
+
+        /*
+         * Test database connection.
+         *
+         * Tests NEVER run against the production schema. `test-db/setup-test-db.sh`
+         * builds a throwaway schema from repository assets (sql/database.sql +
+         * patches + synthetic seed) and grants a dedicated user access to that
+         * schema only, so a misconfigured build cannot read patient data.
+         *
+         * Override these in the Jenkins job (or with credentials bindings) when
+         * the MariaDB instance is not on localhost.
+         */
+        DB_HOST = '127.0.0.1'
+        DB_PORT = '3306'
+        DB_ADMIN_USER = 'root'
+        DB_ADMIN_PASSWORD = 'root'
+        TEST_DB_NAME = 'openrx_test'
+        TEST_DB_USER = 'openrx_test'
+        TEST_DB_PASSWORD = 'openrx_test'
+        TEST_API_PORT = '3202'
     }
 
     stages {
@@ -156,6 +176,130 @@ pipeline {
                         npm run build
                     '''
                 }
+            }
+        }
+
+        /*
+         * ==========================================
+         * INTEGRATION TESTS AGAINST THE TEST DATABASE
+         * ==========================================
+         * These run against a throwaway schema built from repository assets,
+         * never against production. Pre-requisites on the Jenkins agent:
+         * mysql/mariadb client, a MariaDB server, python3 + pip.
+         */
+
+        stage('Backend - Provision Test Database') {
+            steps {
+                sh '''
+                    set -e
+
+                    echo "Rebuilding the $TEST_DB_NAME schema from repository assets"
+                    ./test-db/setup-test-db.sh
+                '''
+            }
+        }
+
+        stage('Backend - E2E Tests (test DB)') {
+            steps {
+                dir('backend') {
+                    sh '''
+                        set -e
+
+                        echo "Running e2e tests against $TEST_DB_NAME"
+
+                        # The e2e spec boots AppModule in-process, so it needs the
+                        # DB_* environment rather than a running server.
+                        #
+                        # --forceExit: the MySQL pool and the socket.io gateway keep
+                        # the event loop alive, so Jest never exits on its own.
+                        DB_HOST="$DB_HOST" \\
+                        DB_PORT="$DB_PORT" \\
+                        DB_USERNAME="$TEST_DB_USER" \\
+                        DB_PASSWORD="$TEST_DB_PASSWORD" \\
+                        DB_DATABASE="$TEST_DB_NAME" \\
+                        DB_LOGGING=false \\
+                        npm run test:e2e -- --forceExit
+                    '''
+                }
+            }
+        }
+
+        stage('Backend - API Tests (test DB)') {
+            steps {
+                sh '''
+                    set -e
+
+                    BACKEND_LOG="$WORKSPACE/backend-test-server.log"
+                    BACKEND_PID=""
+
+                    cleanup() {
+                        if [ -n "$BACKEND_PID" ]; then
+                            kill "$BACKEND_PID" 2>/dev/null || true
+                            wait "$BACKEND_PID" 2>/dev/null || true
+                        fi
+                    }
+                    trap cleanup EXIT
+
+                    echo "Booting the backend against $TEST_DB_NAME on :$TEST_API_PORT"
+                    (
+                        cd backend
+                        PORT="$TEST_API_PORT" \\
+                        DB_HOST="$DB_HOST" \\
+                        DB_PORT="$DB_PORT" \\
+                        DB_USERNAME="$TEST_DB_USER" \\
+                        DB_PASSWORD="$TEST_DB_PASSWORD" \\
+                        DB_DATABASE="$TEST_DB_NAME" \\
+                        DB_LOGGING=false \\
+                        nohup node dist/main.js > "$BACKEND_LOG" 2>&1 &
+                        echo $! > "$WORKSPACE/backend-test-server.pid"
+                    )
+                    BACKEND_PID="$(cat "$WORKSPACE/backend-test-server.pid")"
+
+                    API_URL="http://localhost:$TEST_API_PORT/api"
+
+                    echo "Waiting for $API_URL/config ..."
+                    for i in $(seq 1 60); do
+                        if curl -fsS "$API_URL/config" >/dev/null 2>&1; then
+                            echo "Backend is up after ${i}s"
+                            break
+                        fi
+                        if [ "$i" -eq 60 ]; then
+                            echo "Backend failed to start; last log lines:"
+                            tail -40 "$BACKEND_LOG"
+                            exit 1
+                        fi
+                        sleep 1
+                    done
+
+                    # Any boot warning here is a schema gap worth failing on.
+                    if grep -qiE 'error' "$BACKEND_LOG"; then
+                        echo "Backend logged errors during startup:"
+                        grep -iE 'error' "$BACKEND_LOG" | head -20
+                        exit 1
+                    fi
+
+                    echo "Obtaining a test token as the seeded administrator"
+                    TOKEN="$(python3 -c "
+import json, urllib.request
+req = urllib.request.Request(
+    '$API_URL/auth/login',
+    data=json.dumps({'username': 'admin', 'password': 'OpenRxTest123'}).encode(),
+    headers={'Content-Type': 'application/json'},
+)
+print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
+")"
+
+                    echo "Running pytest against $API_URL"
+                    cd tests/api-tests
+                    python3 -m pip install --quiet -r requirements.txt
+                    OPENRX_API_URL="$API_URL" \\
+                    OPENRX_API_TOKEN="$TOKEN" \\
+                    OPENRX_TEST_PATIENT_ID=1 \\
+                    OPENRX_TEST_APPOINTMENT_ID=1 \\
+                    OPENRX_TEST_PROVIDER_ID=2 \\
+                    OPENRX_TEST_ADMIN_USER_ID=1 \\
+                    python3 -m pytest -v --junitxml=pytest-results.xml
+                '''
             }
         }
     }

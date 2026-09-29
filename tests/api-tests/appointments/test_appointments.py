@@ -15,6 +15,19 @@ def test_appointments(api_session, base_url, auth_headers):
 
 @pytest.mark.authenticated
 @pytest.mark.readonly
+def test_appointment_detail(
+    api_session, base_url, auth_headers, appointment_id
+):
+    response = api_session.get(
+        f"{base_url}/appointments/{appointment_id}",
+        headers=auth_headers,
+        timeout=15,
+    )
+    assert response.status_code in (200, 403, 404)
+
+
+@pytest.mark.authenticated
+@pytest.mark.readonly
 @pytest.mark.later
 def test_open_slots(api_session, base_url, auth_headers):
     pytest.skip("Requires provider/date query contract")

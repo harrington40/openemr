@@ -7,3 +7,10 @@
 
 # Environment
 .env
+
+# Local test-database environment (copy of .env.test.example)
+.env.test
+
+# Test coverage / pytest artefacts produced by running the API tests here
+.coverage
+reports/

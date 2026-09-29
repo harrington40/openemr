@@ -1,1 +1,12 @@
 tests/api-tests/pytest-results.xml
+
+# pytest / Python bytecode artifacts
+.pytest_cache/
+__pycache__/
+*.pyc
+
+# Local virtualenv (NOTE: a venv is currently committed under this path; see
+# the repository README. This rule stops new files being added to it.)
+.venv/
+.coverage
+
