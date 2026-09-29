@@ -4,8 +4,8 @@ import { NursingService } from './nursing.service';
 import { SmartRoutingService } from './smart-routing.service';
 
 @Module({
-  controllers: [NursingController],
-  providers: [NursingService, SmartRoutingService],
-  exports: [SmartRoutingService],
+    controllers: [NursingController],
+    providers: [NursingService, SmartRoutingService],
+    exports: [SmartRoutingService],
 })
 export class NursingModule {}

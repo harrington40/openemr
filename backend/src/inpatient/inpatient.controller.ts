@@ -7,12 +7,12 @@ import { InpatientService } from './inpatient.service';
 @Controller('inpatient')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class InpatientController {
-  constructor(private readonly inpatient: InpatientService) {}
+    constructor(private readonly inpatient: InpatientService) {}
 
-  /** Live inpatient census with smart risk scoring (NEWS2) and capacity metrics. */
-  @Get('overview')
-  @Roles('admin', 'physician', 'nurse')
-  getOverview() {
-    return this.inpatient.getOverview();
-  }
+    /** Live inpatient census with smart risk scoring (NEWS2) and capacity metrics. */
+    @Get('overview')
+    @Roles('admin', 'physician', 'nurse')
+    getOverview() {
+        return this.inpatient.getOverview();
+    }
 }

@@ -5,9 +5,9 @@ import { AvatarsService } from './avatars.service';
 import { Avatar } from './avatar.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Avatar])],
-  controllers: [AvatarsController],
-  providers: [AvatarsService],
-  exports: [AvatarsService],
+    imports: [TypeOrmModule.forFeature([Avatar])],
+    controllers: [AvatarsController],
+    providers: [AvatarsService],
+    exports: [AvatarsService],
 })
 export class AvatarsModule {}

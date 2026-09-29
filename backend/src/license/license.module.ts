@@ -6,9 +6,9 @@ import { LicenseGuard } from './license.guard';
 import { License } from './license.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([License])],
-  controllers: [LicenseController],
-  providers: [LicenseService, LicenseGuard],
-  exports: [LicenseService, LicenseGuard],
+    imports: [TypeOrmModule.forFeature([License])],
+    controllers: [LicenseController],
+    providers: [LicenseService, LicenseGuard],
+    exports: [LicenseService, LicenseGuard],
 })
 export class LicenseModule {}

@@ -11,34 +11,38 @@
  */
 
 export interface ChartRequirement {
-  /** Property name on the patient row. */
-  key: string;
-  /** Human-readable name, surfaced to the user as "still missing". */
-  label: string;
+    /** Property name on the patient row. */
+    key: string;
+    /** Human-readable name, surfaced to the user as "still missing". */
+    label: string;
 }
 
 export const CHART_REQUIREMENTS: ChartRequirement[] = [
-  { key: 'fname', label: 'First name' },
-  { key: 'lname', label: 'Last name' },
-  { key: 'DOB', label: 'Date of birth' },
-  { key: 'sex', label: 'Sex' },
-  { key: 'phone_contact', label: 'Phone' },
-  { key: 'street', label: 'Street' },
-  { key: 'city', label: 'City' },
-  { key: 'providerID', label: 'Assigned provider' },
+    { key: 'fname', label: 'First name' },
+    { key: 'lname', label: 'Last name' },
+    { key: 'DOB', label: 'Date of birth' },
+    { key: 'sex', label: 'Sex' },
+    { key: 'phone_contact', label: 'Phone' },
+    { key: 'street', label: 'Street' },
+    { key: 'city', label: 'City' },
+    { key: 'providerID', label: 'Assigned provider' },
 ];
 
 const isBlank = (value: unknown): boolean => {
-  if (value === null || value === undefined) return true;
-  if (typeof value === 'string') return value.trim() === '';
-  // providerID has no "unassigned" sentinel other than 0/negative.
-  if (typeof value === 'number') return value <= 0;
-  return false;
+    if (value === null || value === undefined) return true;
+    if (typeof value === 'string') return value.trim() === '';
+    // providerID has no "unassigned" sentinel other than 0/negative.
+    if (typeof value === 'number') return value <= 0;
+    return false;
 };
 
 /** Human-readable names of the registration details still outstanding. */
-export function missingChartFields(patient: Record<string, any> | null | undefined): string[] {
-  return CHART_REQUIREMENTS.filter((req) => isBlank(patient?.[req.key])).map((req) => req.label);
+export function missingChartFields(
+    patient: Record<string, any> | null | undefined,
+): string[] {
+    return CHART_REQUIREMENTS.filter((req) => isBlank(patient?.[req.key])).map(
+        (req) => req.label,
+    );
 }
 
 /**
@@ -46,20 +50,24 @@ export function missingChartFields(patient: Record<string, any> | null | undefin
  * registrar still has to approve the chart and assign the patient to a
  * provider before the chart counts as finished.
  */
-export function isChartComplete(patient: Record<string, any> | null | undefined): boolean {
-  if (!patient) return false;
-  if (patient.status === 'pending') return false;
-  return missingChartFields(patient).length === 0;
+export function isChartComplete(
+    patient: Record<string, any> | null | undefined,
+): boolean {
+    if (!patient) return false;
+    if (patient.status === 'pending') return false;
+    return missingChartFields(patient).length === 0;
 }
 
 /** Adds the completeness flags the chart UI and the registrar list render. */
-export function withChartStatus<T extends Record<string, any>>(patient: T): T & {
-  chart_complete: boolean;
-  missing_fields: string[];
+export function withChartStatus<T extends Record<string, any>>(
+    patient: T,
+): T & {
+    chart_complete: boolean;
+    missing_fields: string[];
 } {
-  return {
-    ...patient,
-    chart_complete: isChartComplete(patient),
-    missing_fields: missingChartFields(patient),
-  };
+    return {
+        ...patient,
+        chart_complete: isChartComplete(patient),
+        missing_fields: missingChartFields(patient),
+    };
 }

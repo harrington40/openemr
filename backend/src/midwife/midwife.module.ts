@@ -3,8 +3,8 @@ import { MidwifeController } from './midwife.controller';
 import { MidwifeService } from './midwife.service';
 
 @Module({
-  controllers: [MidwifeController],
-  providers: [MidwifeService],
-  exports: [MidwifeService],
+    controllers: [MidwifeController],
+    providers: [MidwifeService],
+    exports: [MidwifeService],
 })
 export class MidwifeModule {}

@@ -7,14 +7,14 @@ import { PriorityEscalationService } from './priority-escalation.service';
 import { EventBusModule } from '../event-bus/event-bus.module';
 
 @Module({
-  imports: [EventBusModule.forRoot()],
-  providers: [
-    MessagingGateway,
-    MessageProducer,
-    MessageConsumer,
-    DedupEngine,
-    PriorityEscalationService,
-  ],
-  exports: [MessageProducer, MessagingGateway],
+    imports: [EventBusModule.forRoot()],
+    providers: [
+        MessagingGateway,
+        MessageProducer,
+        MessageConsumer,
+        DedupEngine,
+        PriorityEscalationService,
+    ],
+    exports: [MessageProducer, MessagingGateway],
 })
 export class MessagingModule {}

@@ -11,8 +11,8 @@
  */
 
 export interface MoneyLine {
-  id: number;
-  fee: number;
+    id: number;
+    fee: number;
 }
 
 /**
@@ -24,31 +24,32 @@ export interface MoneyLine {
  * corrected nets to zero and is never re-flagged.
  */
 export function selectDuplicateLines(
-  lines: MoneyLine[],
-  reversedIds: Set<number>,
-  refundOffsetUSD = 0,
+    lines: MoneyLine[],
+    reversedIds: Set<number>,
+    refundOffsetUSD = 0,
 ): MoneyLine[] {
-  const open = [...lines]
-    .sort((a, b) => a.id - b.id)
-    .filter((l) => !reversedIds.has(l.id));
-  if (open.length <= 1) return [];
+    const open = [...lines]
+        .sort((a, b) => a.id - b.id)
+        .filter((l) => !reversedIds.has(l.id));
+    if (open.length <= 1) return [];
 
-  let offset = Math.abs(Number(refundOffsetUSD) || 0);
-  const out: MoneyLine[] = [];
-  for (const candidate of open.slice(1)) {      // keep the oldest open line
-    const amount = Math.abs(Number(candidate.fee) || 0);
-    if (offset >= amount - 0.005) {
-      offset = Math.round((offset - amount) * 100) / 100;
-      continue;
+    let offset = Math.abs(Number(refundOffsetUSD) || 0);
+    const out: MoneyLine[] = [];
+    for (const candidate of open.slice(1)) {
+        // keep the oldest open line
+        const amount = Math.abs(Number(candidate.fee) || 0);
+        if (offset >= amount - 0.005) {
+            offset = Math.round((offset - amount) * 100) / 100;
+            continue;
+        }
+        out.push(candidate);
     }
-    out.push(candidate);
-  }
-  return out;
+    return out;
 }
 
 export interface PairCandidate {
-  legacyId: number;
-  orderId: number;
+    legacyId: number;
+    orderId: number;
 }
 
 /**
@@ -57,16 +58,20 @@ export interface PairCandidate {
  * reported (and refunded) more than once.
  */
 export function assignOneToOne<T extends PairCandidate>(candidates: T[]): T[] {
-  const usedOrders = new Set<number>();
-  const usedLines = new Set<number>();
-  const out: T[] = [];
-  for (const candidate of candidates) {
-    if (usedOrders.has(candidate.orderId) || usedLines.has(candidate.legacyId)) continue;
-    usedOrders.add(candidate.orderId);
-    usedLines.add(candidate.legacyId);
-    out.push(candidate);
-  }
-  return out;
+    const usedOrders = new Set<number>();
+    const usedLines = new Set<number>();
+    const out: T[] = [];
+    for (const candidate of candidates) {
+        if (
+            usedOrders.has(candidate.orderId) ||
+            usedLines.has(candidate.legacyId)
+        )
+            continue;
+        usedOrders.add(candidate.orderId);
+        usedLines.add(candidate.legacyId);
+        out.push(candidate);
+    }
+    return out;
 }
 
 /**
@@ -75,6 +80,9 @@ export function assignOneToOne<T extends PairCandidate>(candidates: T[]): T[] {
  * without this an unrelated imaging charge in the same two-minute window would be
  * reported as a duplicate lab charge.
  */
-export function legacyLineMatchesOrderCharge(code: string, exact: boolean): boolean {
-  return exact || /^(80048|LAB-)/i.test(String(code || ''));
+export function legacyLineMatchesOrderCharge(
+    code: string,
+    exact: boolean,
+): boolean {
+    return exact || /^(80048|LAB-)/i.test(String(code || ''));
 }

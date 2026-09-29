@@ -1,4 +1,20 @@
-import { DataSource } from 'typeorm';
+/**
+ * The only part of a `DataSource` this helper uses. Declaring the narrow shape
+ * keeps the dependency (and the test double) honest.
+ */
+export interface CategoryDataSource {
+    query<T = unknown>(sql: string, params?: unknown[]): Promise<T>;
+}
+
+/** Row holding an existing calendar-category id. */
+interface CalendarCategoryIdRow {
+    pc_catid: number;
+}
+
+/** Affected-rows result of the category insert. */
+interface CalendarCategoryInsertResult {
+    insertId: number;
+}
 
 /**
  * Calendar categories.
@@ -24,40 +40,40 @@ const APPOINTMENT_CATEGORY_TYPE = 1;
  * the table has nothing suitable at all.
  */
 export async function resolveVisitCategoryId(
-  dataSource: DataSource,
-  preferredId?: number | string | null,
+    dataSource: CategoryDataSource,
+    preferredId?: number | string | null,
 ): Promise<number> {
-  const preferred = Number(preferredId);
-  if (Number.isFinite(preferred) && preferred > 0) {
-    const rows = await dataSource.query(
-      `SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catid = ? LIMIT 1`,
-      [preferred],
-    );
-    if (rows?.length) return Number(rows[0].pc_catid);
-  }
+    const preferred = Number(preferredId);
+    if (Number.isFinite(preferred) && preferred > 0) {
+        const rows = await dataSource.query<CalendarCategoryIdRow[]>(
+            `SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catid = ? LIMIT 1`,
+            [preferred],
+        );
+        if (rows?.length) return Number(rows[0].pc_catid);
+    }
 
-  const existing = await dataSource.query(
-    `SELECT pc_catid FROM openemr_postcalendar_categories
+    const existing = await dataSource.query<CalendarCategoryIdRow[]>(
+        `SELECT pc_catid FROM openemr_postcalendar_categories
       WHERE pc_cattype = ? AND pc_active = 1
       ORDER BY pc_catid ASC LIMIT 1`,
-    [APPOINTMENT_CATEGORY_TYPE],
-  );
-  if (existing?.length) return Number(existing[0].pc_catid);
+        [APPOINTMENT_CATEGORY_TYPE],
+    );
+    if (existing?.length) return Number(existing[0].pc_catid);
 
-  const byName = await dataSource.query(
-    `SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = ? LIMIT 1`,
-    [DEFAULT_VISIT_CATEGORY],
-  );
-  if (byName?.length) return Number(byName[0].pc_catid);
+    const byName = await dataSource.query<CalendarCategoryIdRow[]>(
+        `SELECT pc_catid FROM openemr_postcalendar_categories WHERE pc_catname = ? LIMIT 1`,
+        [DEFAULT_VISIT_CATEGORY],
+    );
+    if (byName?.length) return Number(byName[0].pc_catid);
 
-  // Nothing usable in the table — add the standard visit category.
-  const inserted = await dataSource.query(
-    `INSERT INTO openemr_postcalendar_categories
+    // Nothing usable in the table — add the standard visit category.
+    const inserted = await dataSource.query<CalendarCategoryInsertResult>(
+        `INSERT INTO openemr_postcalendar_categories
        (pc_constant_id, pc_catname, pc_catcolor, pc_catdesc, pc_recurrtype, pc_duration,
         pc_end_date_flag, pc_end_date_freq, pc_end_all_day, pc_dailylimit, pc_cattype,
         pc_active, pc_seq, aco_spec)
      VALUES (NULL, ?, '#17a2b8', 'General office visit', 0, 15, 0, 0, 0, 0, ?, 1, 0, 'encounters|notes')`,
-    [DEFAULT_VISIT_CATEGORY, APPOINTMENT_CATEGORY_TYPE],
-  );
-  return Number(inserted.insertId);
+        [DEFAULT_VISIT_CATEGORY, APPOINTMENT_CATEGORY_TYPE],
+    );
+    return Number(inserted.insertId);
 }

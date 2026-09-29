@@ -2,6 +2,17 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from './roles.decorator';
 
+/** Authenticated principal attached by `JwtAuthGuard`. */
+interface RolesUser {
+    sub?: number | string;
+    role?: string;
+}
+
+/** Authenticated request as seen by the roles guard. */
+interface RolesRequest {
+    user?: RolesUser;
+}
+
 /**
  * Roles guard — checks if the authenticated user has the required role(s).
  *
@@ -22,30 +33,30 @@ import { ROLES_KEY } from './roles.decorator';
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+    constructor(private reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
-    const requiredRoles = this.reflector.getAllAndOverride<string[]>(ROLES_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    canActivate(context: ExecutionContext): boolean {
+        const requiredRoles = this.reflector.getAllAndOverride<string[]>(
+            ROLES_KEY,
+            [context.getHandler(), context.getClass()],
+        );
 
-    // No @Roles() decorator → public or only JWT required
-    if (!requiredRoles || requiredRoles.length === 0) {
-      return true;
+        // No @Roles() decorator → public or only JWT required
+        if (!requiredRoles || requiredRoles.length === 0) {
+            return true;
+        }
+
+        const { user } = context.switchToHttp().getRequest<RolesRequest>();
+        if (!user) {
+            return false;
+        }
+
+        // Admin bypasses all role checks
+        if (user.role === 'admin') {
+            return true;
+        }
+
+        // Check if user's role matches any required role
+        return user.role !== undefined && requiredRoles.includes(user.role);
     }
-
-    const { user } = context.switchToHttp().getRequest();
-    if (!user) {
-      return false;
-    }
-
-    // Admin bypasses all role checks
-    if (user.role === 'admin') {
-      return true;
-    }
-
-    // Check if user's role matches any required role
-    return requiredRoles.includes(user.role);
-  }
 }

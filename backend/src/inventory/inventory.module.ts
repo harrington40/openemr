@@ -5,9 +5,9 @@ import { InventoryService } from './inventory.service';
 import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [BillingModule],
-  controllers: [InventoryController, VendorPortalController],
-  providers: [InventoryService],
-  exports: [InventoryService],
+    imports: [BillingModule],
+    controllers: [InventoryController, VendorPortalController],
+    providers: [InventoryService],
+    exports: [InventoryService],
 })
 export class InventoryModule {}

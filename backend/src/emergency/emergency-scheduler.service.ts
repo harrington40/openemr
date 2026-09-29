@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+    Injectable,
+    Logger,
+    OnModuleDestroy,
+    OnModuleInit,
+} from '@nestjs/common';
 import { EmergencyService } from './emergency.service';
 
 /**
@@ -21,59 +26,78 @@ import { EmergencyService } from './emergency.service';
  * dependency-free interval plus a boot check. @nestjs/schedule is not installed
  * and the deploy ships dist/ only.
  */
+/** Summary of the last safety sweep, shown on the emergency board. */
+export interface SweepSummary {
+    checked: number;
+    escalated: number;
+    reassessmentPages: number;
+    by: string;
+}
+
 @Injectable()
-export class EmergencySchedulerService implements OnModuleInit, OnModuleDestroy {
-  private readonly logger = new Logger(EmergencySchedulerService.name);
-  private timer?: NodeJS.Timeout;
-  private bootTimer?: NodeJS.Timeout;
-  private running = false;
+export class EmergencySchedulerService
+    implements OnModuleInit, OnModuleDestroy
+{
+    private readonly logger = new Logger(EmergencySchedulerService.name);
+    private timer?: NodeJS.Timeout;
+    private bootTimer?: NodeJS.Timeout;
+    private running = false;
 
-  /** Last sweep, surfaced so the board can show that the safety net is alive. */
-  lastSweepAt: string | null = null;
-  lastSweepResult: any = null;
+    /** Last sweep, surfaced so the board can show that the safety net is alive. */
+    lastSweepAt: string | null = null;
+    lastSweepResult: SweepSummary | null = null;
 
-  private static readonly INTERVAL_MS = 5 * 60 * 1000;
+    private static readonly INTERVAL_MS = 5 * 60 * 1000;
 
-  constructor(private readonly emergency: EmergencyService) {}
+    constructor(private readonly emergency: EmergencyService) {}
 
-  onModuleInit(): void {
-    this.timer = setInterval(() => { void this.sweep('scheduler'); }, EmergencySchedulerService.INTERVAL_MS);
-    this.bootTimer = setTimeout(() => { void this.sweep('startup'); }, 120 * 1000);
-    this.logger.log('Emergency safety sweep armed (breach escalation + reassessment chase).');
-  }
-
-  onModuleDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
-    if (this.bootTimer) clearTimeout(this.bootTimer);
-  }
-
-  /** Exposed so an administrator can trigger the same sweep on demand. */
-  async sweep(actor = 'scheduler') {
-    if (this.running) return { ran: false, reason: 'a sweep is already running' };
-    this.running = true;
-    try {
-      const result = await this.emergency.runSafetySweep(actor);
-      const escalated = result.escalated?.length || 0;
-      const chased = result.reassessmentPages?.length || 0;
-      this.lastSweepAt = new Date().toISOString();
-      this.lastSweepResult = {
-        checked: result.checked,
-        escalated,
-        reassessmentPages: chased,
-        by: actor,
-      };
-      if (escalated || chased) {
-        this.logger.warn(
-          `Emergency sweep: ${escalated} escalated past target, ${chased} reassessment${chased === 1 ? '' : 's'} chased.`,
+    onModuleInit(): void {
+        this.timer = setInterval(() => {
+            void this.sweep('scheduler');
+        }, EmergencySchedulerService.INTERVAL_MS);
+        this.bootTimer = setTimeout(() => {
+            void this.sweep('startup');
+        }, 120 * 1000);
+        this.logger.log(
+            'Emergency safety sweep armed (breach escalation + reassessment chase).',
         );
-      }
-      return { ran: true, ...result };
-    } catch (err: any) {
-      // A failed sweep must not kill the timer.
-      this.logger.error(`Emergency sweep failed: ${err?.message || err}`);
-      return { ran: false, reason: 'error' };
-    } finally {
-      this.running = false;
     }
-  }
+
+    onModuleDestroy(): void {
+        if (this.timer) clearInterval(this.timer);
+        if (this.bootTimer) clearTimeout(this.bootTimer);
+    }
+
+    /** Exposed so an administrator can trigger the same sweep on demand. */
+    async sweep(actor = 'scheduler') {
+        if (this.running)
+            return { ran: false, reason: 'a sweep is already running' };
+        this.running = true;
+        try {
+            const result = await this.emergency.runSafetySweep(actor);
+            const escalated = result.escalated?.length || 0;
+            const chased = result.reassessmentPages?.length || 0;
+            this.lastSweepAt = new Date().toISOString();
+            this.lastSweepResult = {
+                checked: result.checked,
+                escalated,
+                reassessmentPages: chased,
+                by: actor,
+            };
+            if (escalated || chased) {
+                this.logger.warn(
+                    `Emergency sweep: ${escalated} escalated past target, ${chased} reassessment${chased === 1 ? '' : 's'} chased.`,
+                );
+            }
+            return { ran: true, ...result };
+        } catch (err) {
+            // A failed sweep must not kill the timer.
+            this.logger.error(
+                `Emergency sweep failed: ${err instanceof Error ? err.message : String(err)}`,
+            );
+            return { ran: false, reason: 'error' };
+        } finally {
+            this.running = false;
+        }
+    }
 }

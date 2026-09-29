@@ -4,8 +4,8 @@ import { LabsService } from './labs.service';
 import { BillingModule } from '../billing/billing.module';
 
 @Module({
-  imports: [BillingModule],
-  controllers: [LabsController, LabDashboardController],
-  providers: [LabsService],
+    imports: [BillingModule],
+    controllers: [LabsController, LabDashboardController],
+    providers: [LabsService],
 })
 export class LabsModule {}

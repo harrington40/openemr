@@ -10,7 +10,7 @@ import { PatientPortalService } from './patient-portal.service';
  * a password has to be reissued.
  */
 @Module({
-  providers: [PatientPortalService],
-  exports: [PatientPortalService],
+    providers: [PatientPortalService],
+    exports: [PatientPortalService],
 })
 export class PatientPortalModule {}

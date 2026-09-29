@@ -6,8 +6,8 @@ import { MessagingModule } from '../messaging/messaging.module';
 import { PatientPortalModule } from '../patient-portal/patient-portal.module';
 
 @Module({
-  imports: [forwardRef(() => MessagingModule), PatientPortalModule],
-  controllers: [AdminController, DbAdminController],
-  providers: [AdminService],
+    imports: [forwardRef(() => MessagingModule), PatientPortalModule],
+    controllers: [AdminController, DbAdminController],
+    providers: [AdminService],
 })
 export class AdminModule {}

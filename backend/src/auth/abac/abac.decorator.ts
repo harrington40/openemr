@@ -3,26 +3,26 @@ import { SetMetadata } from '@nestjs/common';
 export const ABAC_KEY = 'abac';
 
 export type ResourceType =
-  | 'patient'
-  | 'encounter'
-  | 'document'
-  | 'prescription'
-  | 'appointment'
-  | 'imaging'
-  | 'lab';
+    | 'patient'
+    | 'encounter'
+    | 'document'
+    | 'prescription'
+    | 'appointment'
+    | 'imaging'
+    | 'lab';
 
 export type ActionType =
-  | 'read'
-  | 'write'
-  | 'delete'
-  | 'verify'
-  | 'prescribe'
-  | 'dispense'
-  | 'upload';
+    | 'read'
+    | 'write'
+    | 'delete'
+    | 'verify'
+    | 'prescribe'
+    | 'dispense'
+    | 'upload';
 
 export interface AbacMetadata {
-  resource: ResourceType;
-  action: ActionType;
+    resource: ResourceType;
+    action: ActionType;
 }
 
 /**
@@ -39,4 +39,4 @@ export interface AbacMetadata {
  * Apply alongside @UseGuards(JwtAuthGuard, RolesGuard, AbacGuard).
  */
 export const RequireAccess = (resource: ResourceType, action: ActionType) =>
-  SetMetadata(ABAC_KEY, { resource, action } as AbacMetadata);
+    SetMetadata(ABAC_KEY, { resource, action });

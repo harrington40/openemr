@@ -14,5 +14,5 @@ export const DEDUP_WINDOW_HOURS = 24;
 export const WINDOW_SQL = `DATE_SUB(NOW(), INTERVAL ${DEDUP_WINDOW_HOURS} HOUR)`;
 
 export function normalizeKey(value: string): string {
-  return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    return (value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }

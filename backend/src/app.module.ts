@@ -38,72 +38,73 @@ import { MailboxModule } from './mailbox/mailbox.module';
 import { EmergencyModule } from './emergency/emergency.module';
 
 @Module({
-  controllers: [AppConfigController],
-  imports: [
-    ConfigModule.forRoot({
-      isGlobal: true,
-      load: [databaseConfig],
-    }),
-    TypeOrmModule.forRootAsync({
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        type: 'mysql',
-        host: config.get<string>('database.host'),
-        port: config.get<number>('database.port'),
-        username: config.get<string>('database.username'),
-        password: config.get<string>('database.password'),
-        database: config.get<string>('database.database'),
-        entities: [__dirname + '/**/*.entity{.ts,.js}'],
-        synchronize: false,
-        // Explicit opt-in. Keyed off NODE_ENV, this silently switched ON whenever
-        // the variable went missing — which a deploy did by restarting pm2 with
-        // --update-env from a shell that had no NODE_ENV. TypeORM then logged
-        // every statement with its parameters, writing patient names, dates of
-        // birth and phone numbers into plaintext log files (78 MB of them).
-        logging: process.env.DB_LOGGING === 'true',
-        extra: { charset: 'utf8mb4_unicode_ci' },
-      }),
-    }),
-    StorageModule,
-    EventBusModule.forRoot({
-      adapter: (process.env.EVENT_BUS_ADAPTER as 'in-memory' | 'kafka') || 'in-memory',
-      brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
-      clientId: process.env.KAFKA_CLIENT_ID || 'openrx',
-    }),
-    AuthModule,
-    PatientsModule,
-    AppointmentsModule,
-    EncountersModule,
-    ReferenceModule,
-    ClinicalModule,
-    LabsModule,
-    BillingModule,
-    AdminModule,
-    ReportsModule,
-    CcdaModule,
-    SmartModule,
-    FhirModule,
-    MessagingModule,
-    ProviderModule,
-    FdaModule,
-    DocumentsModule,
-    AvatarsModule,
-    ImagingModule,
-    BookingsModule,
-    LabReportsModule,
-    InpatientModule,
-    NotificationsModule,
-    MailboxModule,
-    EmergencyModule,
+    controllers: [AppConfigController],
+    imports: [
+        ConfigModule.forRoot({
+            isGlobal: true,
+            load: [databaseConfig],
+        }),
+        TypeOrmModule.forRootAsync({
+            imports: [ConfigModule],
+            inject: [ConfigService],
+            useFactory: (config: ConfigService) => ({
+                type: 'mysql',
+                host: config.get<string>('database.host'),
+                port: config.get<number>('database.port'),
+                username: config.get<string>('database.username'),
+                password: config.get<string>('database.password'),
+                database: config.get<string>('database.database'),
+                entities: [__dirname + '/**/*.entity{.ts,.js}'],
+                synchronize: false,
+                // Explicit opt-in. Keyed off NODE_ENV, this silently switched ON whenever
+                // the variable went missing — which a deploy did by restarting pm2 with
+                // --update-env from a shell that had no NODE_ENV. TypeORM then logged
+                // every statement with its parameters, writing patient names, dates of
+                // birth and phone numbers into plaintext log files (78 MB of them).
+                logging: process.env.DB_LOGGING === 'true',
+                extra: { charset: 'utf8mb4_unicode_ci' },
+            }),
+        }),
+        StorageModule,
+        EventBusModule.forRoot({
+            adapter:
+                (process.env.EVENT_BUS_ADAPTER as 'in-memory' | 'kafka') ||
+                'in-memory',
+            brokers: (process.env.KAFKA_BROKERS || 'localhost:9092').split(','),
+            clientId: process.env.KAFKA_CLIENT_ID || 'openrx',
+        }),
+        AuthModule,
+        PatientsModule,
+        AppointmentsModule,
+        EncountersModule,
+        ReferenceModule,
+        ClinicalModule,
+        LabsModule,
+        BillingModule,
+        AdminModule,
+        ReportsModule,
+        CcdaModule,
+        SmartModule,
+        FhirModule,
+        MessagingModule,
+        ProviderModule,
+        FdaModule,
+        DocumentsModule,
+        AvatarsModule,
+        ImagingModule,
+        BookingsModule,
+        LabReportsModule,
+        InpatientModule,
+        NotificationsModule,
+        MailboxModule,
+        EmergencyModule,
 
-
-    LicenseModule,
-    NursingModule,
-    PatientChatModule,
-    ReferralsModule,
-    InventoryModule,
-    MidwifeModule,
-  ],
+        LicenseModule,
+        NursingModule,
+        PatientChatModule,
+        ReferralsModule,
+        InventoryModule,
+        MidwifeModule,
+    ],
 })
 export class AppModule {}

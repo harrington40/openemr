@@ -3,7 +3,7 @@ import { ReferenceController } from './reference.controller';
 import { ReferenceService } from './reference.service';
 
 @Module({
-  controllers: [ReferenceController],
-  providers: [ReferenceService],
+    controllers: [ReferenceController],
+    providers: [ReferenceService],
 })
 export class ReferenceModule {}
