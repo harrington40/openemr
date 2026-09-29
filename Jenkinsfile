@@ -31,6 +31,15 @@ pipeline {
         TEST_DB_USER = 'openrx_test'
         TEST_DB_PASSWORD = 'openrx_test'
         TEST_API_PORT = '3202'
+
+        /*
+         * Set TEST_DB_USE_DOCKER=true to have the pipeline start a disposable
+         * MariaDB container for the run instead of using a server that is
+         * already installed on the agent. Override TEST_DB_PORT when the
+         * default collides with an existing database.
+         */
+        TEST_DB_USE_DOCKER = 'false'
+        TEST_DB_CONTAINER = 'openrx-test-db'
     }
 
     stages {
@@ -184,8 +193,14 @@ pipeline {
          * INTEGRATION TESTS AGAINST THE TEST DATABASE
          * ==========================================
          * These run against a throwaway schema built from repository assets,
-         * never against production. Pre-requisites on the Jenkins agent:
-         * mysql/mariadb client, a MariaDB server, python3 + pip.
+         * never against production.
+         *
+         * SQL is executed with Node via test-db/run-sql.mjs and the backend's
+         * own mysql2 dependency, so the agent does NOT need a `mysql` client.
+         * Pre-requisites: Node (already installed by the earlier stages), a
+         * MariaDB reachable at DB_HOST:DB_PORT, and python3 + pip for the API
+         * suite. Set TEST_DB_USE_DOCKER=true to start a disposable container
+         * instead of relying on an installed server.
          */
 
         stage('Backend - Provision Test Database') {
@@ -196,9 +211,13 @@ pipeline {
                     echo "Rebuilding the $TEST_DB_NAME schema from repository assets"
 
                     # Invoked through `bash` on purpose: this repository has
-                    # core.fileMode=false, so the executable bit is not reliable
+                    # core.fileMode=false, so the executable bit is unreliable
                     # in checkouts.
-                    bash ./test-db/setup-test-db.sh
+                    if [ "${TEST_DB_USE_DOCKER:-false}" = "true" ]; then
+                        bash ./test-db/setup-test-db.sh --docker
+                    else
+                        bash ./test-db/setup-test-db.sh
+                    fi
                 '''
             }
         }
@@ -261,13 +280,15 @@ pipeline {
 
                     API_URL="http://localhost:$TEST_API_PORT/api"
 
+                    # App boot has been observed around 50s on a loaded machine,
+                    # so allow generous headroom before declaring failure.
                     echo "Waiting for $API_URL/config ..."
-                    for i in $(seq 1 60); do
+                    for i in $(seq 1 150); do
                         if curl -fsS "$API_URL/config" >/dev/null 2>&1; then
                             echo "Backend is up after ${i}s"
                             break
                         fi
-                        if [ "$i" -eq 60 ]; then
+                        if [ "$i" -eq 150 ]; then
                             echo "Backend failed to start; last log lines:"
                             tail -40 "$BACKEND_LOG"
                             exit 1
@@ -327,6 +348,15 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
         }
 
         always {
+            // Remove the disposable test database container, if one was used.
+            // Guarded so it is harmless when docker is absent or the container
+            // was never created.
+            sh '''
+                if [ "${TEST_DB_USE_DOCKER:-false}" = "true" ] && command -v docker >/dev/null 2>&1; then
+                    docker rm -f "${TEST_DB_CONTAINER:-openrx-test-db}" >/dev/null 2>&1 || true
+                fi
+            '''
+
             echo '======================================'
             echo ' Jenkins Build Information'
             echo '======================================'

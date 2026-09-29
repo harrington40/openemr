@@ -6,7 +6,15 @@ repository assets. Tests never read production rows.
 ```bash
 bash ./test-db/setup-test-db.sh                    # create / recreate + seed
 bash ./test-db/run-backend-against-test-db.sh      # boot backend on :3202
+
+bash ./test-db/setup-test-db.sh --docker           # no MariaDB installed? use a
+                                                   # disposable container instead
 ```
+
+Requires **Node** and a `npm ci` in `backend/` — SQL is executed by
+`run-sql.mjs` using the backend's own `mysql2` dependency, so no `mysql` client
+has to be installed on the machine or the CI agent. With `--docker` the only
+other requirement is a working Docker daemon.
 
 The scripts are called through `bash` on purpose. This repository has
 `core.fileMode=false` (it is developed on a Windows mount), so Git does not
@@ -85,6 +93,7 @@ cannot miss it. `patches.sql` is the explicit, versioned record until then.
 | `DB_ADMIN_USER` / `DB_ADMIN_PASSWORD` | `root` / `root` | Used to create the schema and grants |
 | `TEST_DB_NAME` | `openrx_test` | Test schema |
 | `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` | Restricted runtime user |
+| `TEST_DB_CONTAINER` / `TEST_DB_IMAGE` | `openrx-test-db` / `mariadb:11.8` | Container name and image for `--docker` |
 | `PORT` | `3202` | Backend port for local runs |
 
 For this development machine the containerised MariaDB listens on **8320**:
@@ -107,8 +116,18 @@ Seeded patient ids: `1`, `2`, `3`. Appointment id: `1`.
 
 The pipeline builds the test schema, then runs the e2e and API suites against
 it (`Backend - Provision Test Database`, `Backend - E2E Tests (test DB)`,
-`Backend - API Tests (test DB)`). Agent prerequisites: a `mysql`/`mariadb`
-client, a MariaDB server, and `python3` + `pip`.
+`Backend - API Tests (test DB)`).
+
+Agent prerequisites: **Node** (the pipeline already installs it) plus a MariaDB
+reachable at `DB_HOST:DB_PORT`, and `python3` + `pip` for the API suite. No
+`mysql` client is needed. If the agent has no MariaDB, set
+`TEST_DB_USE_DOCKER=true` in the job and the pipeline will start a disposable
+`mariadb:11.8` container and remove it in `post { always }`.
+
+> The `--docker` path could not be exercised in the development sandbox: its
+> Docker daemon cannot program NAT rules (`Unable to enable DNAT rule`), and
+> `--network host` collides with the database already on port 3306. On a normal
+> Linux host port publishing works, but treat that path as untested.
 
 Verified locally end to end: backend boots against the fresh schema with no
 warnings, and the API suite reports **426 passed, 138 skipped, 0 failed**.

@@ -46,6 +46,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # No `mysql` client needed: the schema is applied through
+      # test-db/run-sql.mjs, which uses the backend's mysql2 dependency.
       - name: Provision test database
         working-directory: .
         env:
@@ -54,10 +56,6 @@ jobs:
           DB_ADMIN_USER: root
           DB_ADMIN_PASSWORD: root
         run: |
-          command -v mysql >/dev/null || {
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq default-mysql-client
-          }
           # Via `bash`: core.fileMode=false here, so the exec bit is unreliable.
           bash ./test-db/setup-test-db.sh
 
@@ -112,6 +110,14 @@ jobs:
         with:
           python-version: "3.12"
 
+      # `npm ci` has to come first: test-db/run-sql.mjs resolves mysql2 out of
+      # backend/node_modules.
+      - name: Install backend dependencies and build
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+
       - name: Provision test database
         env:
           DB_HOST: 127.0.0.1
@@ -119,18 +125,8 @@ jobs:
           DB_ADMIN_USER: root
           DB_ADMIN_PASSWORD: root
         run: |
-          command -v mysql >/dev/null || {
-            sudo apt-get update -qq
-            sudo apt-get install -y -qq default-mysql-client
-          }
           # Via `bash`: core.fileMode=false here, so the exec bit is unreliable.
           bash ./test-db/setup-test-db.sh
-
-      - name: Install backend dependencies and build
-        working-directory: backend
-        run: |
-          npm ci
-          npm run build
 
       - name: Install API test dependencies
         working-directory: tests/api-tests
@@ -179,13 +175,15 @@ jobs:
 
           API_URL="http://localhost:$TEST_API_PORT/api"
 
+          # App boot has been observed around 50s on a loaded machine, so allow
+          # generous headroom before declaring failure.
           echo "Waiting for $API_URL/config ..."
-          for i in $(seq 1 60); do
+          for i in $(seq 1 150); do
             if curl -fsS "$API_URL/config" >/dev/null 2>&1; then
               echo "Backend is up after ${i}s"
               break
             fi
-            if [ "$i" -eq 60 ]; then
+            if [ "$i" -eq 150 ]; then
               echo "Backend failed to start; last log lines:"
               tail -40 "$BACKEND_LOG"
               exit 1
