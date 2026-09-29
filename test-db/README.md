@@ -130,6 +130,46 @@ Jenkinsfile edit is needed.
 The provisioning step prints the raw driver error (`ECONNREFUSED` versus
 `Access denied`) so the build log tells you which row of that table you are in.
 
+### One-time setup on the server (managed mode)
+
+An ordinary application account **cannot** create a database. The shared
+`openemr` login holds `USAGE ON *.*` plus `ALL PRIVILEGES ON openemr.*` only, so
+it can neither `CREATE DATABASE` nor `CREATE USER`.
+
+Run this **once on the server, as a MariaDB administrator**:
+
+```sql
+CREATE DATABASE IF NOT EXISTS openrx_test
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+
+-- Recommended: an account that can see nothing but the test schema.
+CREATE USER IF NOT EXISTS 'openrx_test'@'%' IDENTIFIED BY 'openrx_test';
+GRANT ALL PRIVILEGES ON openrx_test.* TO 'openrx_test'@'%';
+FLUSH PRIVILEGES;
+```
+
+`ALL PRIVILEGES ON openrx_test.*` also permits `DROP`/`CREATE DATABASE` for that
+one schema, which is all the pipeline needs to rebuild itself on every run — so
+no administrative credentials are required after this. Then set:
+
+| Variable | Value |
+| --- | --- |
+| `TEST_DB_MANAGED` | `true` |
+| `TEST_DB_NAME` | `openrx_test` |
+| `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` |
+
+If you would rather reuse the existing `openemr` login, grant it the test
+schema as well:
+
+```sql
+GRANT ALL PRIVILEGES ON openrx_test.* TO 'openemr'@'%';
+FLUSH PRIVILEGES;
+```
+
+and set `TEST_DB_USER=openemr` / `TEST_DB_PASSWORD=openemr`. That works, but the
+account can also read the production `openemr` schema, so `--managed` prints a
+warning instead of failing the isolation check. A dedicated user is preferred.
+
 ## Seeded credentials (test-only)
 
 | Username | Password | Role |

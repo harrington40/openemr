@@ -40,6 +40,11 @@ pipeline {
         // pipeline then starts and provisions a disposable container.
         TEST_DB_USE_DOCKER = "${env.TEST_DB_USE_DOCKER ?: 'false'}"
         TEST_DB_CONTAINER = "${env.TEST_DB_CONTAINER ?: 'openrx-test-db'}"
+        // Set TEST_DB_MANAGED=true when the test schema and its user already
+        // exist (created once by an administrator). The pipeline then needs no
+        // administrative database credentials at all: TEST_DB_USER alone must
+        // hold ALL PRIVILEGES on TEST_DB_NAME.
+        TEST_DB_MANAGED = "${env.TEST_DB_MANAGED ?: 'false'}"
     }
 
     stages {
@@ -215,6 +220,8 @@ pipeline {
                     # in checkouts.
                     if [ "${TEST_DB_USE_DOCKER:-false}" = "true" ]; then
                         bash ./test-db/setup-test-db.sh --docker
+                    elif [ "${TEST_DB_MANAGED:-false}" = "true" ]; then
+                        bash ./test-db/setup-test-db.sh --managed
                     else
                         bash ./test-db/setup-test-db.sh
                     fi

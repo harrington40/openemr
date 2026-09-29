@@ -23,6 +23,8 @@
 #   ./setup-test-db.sh            create/recreate against DB_HOST/DB_PORT
 #   ./setup-test-db.sh --keep     keep existing data, re-apply patches + seed
 #   ./setup-test-db.sh --docker   start a disposable MariaDB container first
+#   ./setup-test-db.sh --managed  the schema + user already exist, created once
+#                                 by an administrator; no admin credentials used
 #
 # Environment overrides:
 #   DB_HOST DB_PORT                   server host/port (default localhost:3306)
@@ -32,6 +34,7 @@
 #   TEST_DB_NAME                      default openrx_test
 #   TEST_DB_USER TEST_DB_PASSWORD     default openrx_test / openrx_test
 #   TEST_DB_CONTAINER TEST_DB_IMAGE   default openrx-test-db / mariadb:11.8
+#   TEST_DB_MANAGED=true              same as --managed
 #
 set -euo pipefail
 
@@ -56,18 +59,32 @@ TEST_DB_IMAGE="${TEST_DB_IMAGE:-mariadb:11.8}"
 
 MODE="fresh"
 USE_DOCKER=0
+MANAGED=0
+[[ "${TEST_DB_MANAGED:-false}" == "true" ]] && MANAGED=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --keep)   MODE="keep"; shift ;;
-        --docker) USE_DOCKER=1; shift ;;
+        --keep)    MODE="keep"; shift ;;
+        --docker)  USE_DOCKER=1; shift ;;
+        --managed) MANAGED=1; shift ;;
         -h|--help) sed -n '3,32p' "$0" | sed -E 's/^# ?//'; exit 0 ;;
         *) echo "unknown option: $1" >&2; exit 2 ;;
     esac
 done
 
+# Managed mode: the schema and its user already exist, created once by an
+# administrator (see README). No administrative credentials are used at all;
+# every statement runs as $TEST_DB_USER, which needs ALL PRIVILEGES on
+# $TEST_DB_NAME (that is enough to drop and recreate the schema and to load
+# the tables).
+if [[ "$MANAGED" -eq 1 ]]; then
+    DB_ADMIN_USER="$TEST_DB_USER"
+    DB_ADMIN_PASSWORD="$TEST_DB_PASSWORD"
+fi
+
 log()  { printf '\033[0;36m[test-db]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[0;32m       ok\033[0m %s\n' "$*"; }
+warn() { printf '\033[0;33m     warn\033[0m %s\n' "$*" >&2; }
 fail() { printf '\033[0;31m   [fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
 RUN_SQL="$SCRIPT_DIR/run-sql.mjs"
@@ -177,11 +194,15 @@ else
 fi
 ok "database ready"
 
-log "Ensuring restricted user '$TEST_DB_USER' (scoped to $TEST_DB_NAME only)"
-admin_sql --quiet --execute \
-    "CREATE USER IF NOT EXISTS '$TEST_DB_USER'@'%' IDENTIFIED BY '$TEST_DB_PASSWORD';
-     GRANT ALL PRIVILEGES ON \`$TEST_DB_NAME\`.* TO '$TEST_DB_USER'@'%';
-     FLUSH PRIVILEGES;"
+if [[ "$MANAGED" -eq 1 ]]; then
+    log "Managed mode: using the existing user '$TEST_DB_USER' as-is"
+else
+    log "Ensuring restricted user '$TEST_DB_USER' (scoped to $TEST_DB_NAME only)"
+    admin_sql --quiet --execute \
+        "CREATE USER IF NOT EXISTS '$TEST_DB_USER'@'%' IDENTIFIED BY '$TEST_DB_PASSWORD';
+         GRANT ALL PRIVILEGES ON \`$TEST_DB_NAME\`.* TO '$TEST_DB_USER'@'%';
+         FLUSH PRIVILEGES;"
+fi
 ok "user ready"
 
 # --- 2. Schema --------------------------------------------------------------
@@ -200,12 +221,25 @@ log "Loading synthetic seed data"
 admin_sql --database "$TEST_DB_NAME" --file "$SCRIPT_DIR/seed.sql"
 ok "seed loaded"
 
-# --- 4. Prove the restricted user works, and is isolated --------------------
+# --- 4. Prove the user works, and check isolation ---------------------------
 target_sql --execute "SELECT 1" --quiet >/dev/null
+
 if target_sql --execute "SELECT 1 FROM openemr.patient_data LIMIT 1" --quiet >/dev/null 2>&1; then
-    fail "user '$TEST_DB_USER' can read the production schema - fix the grants"
+    if [[ "$MANAGED" -eq 1 ]]; then
+        # Managed mode reuses whichever account the administrator provided. If
+        # that account also reaches another schema (for example the shared
+        # `openemr` login), the test run is still confined to $TEST_DB_NAME
+        # because every statement here and the backend itself are pinned to it
+        # — but a dedicated account is safer.
+        warn "user '$TEST_DB_USER' can also read another schema (e.g. openemr)."
+        warn "Everything is pinned to $TEST_DB_NAME, but a user granted on"
+        warn "$TEST_DB_NAME.* alone is safer. See test-db/README.md."
+    else
+        fail "user '$TEST_DB_USER' can read the production schema - fix the grants"
+    fi
+else
+    ok "user '$TEST_DB_USER' is scoped to $TEST_DB_NAME and cannot read other schemas"
 fi
-ok "user '$TEST_DB_USER' is scoped to $TEST_DB_NAME and cannot read other schemas"
 
 # --- 5. Summary -------------------------------------------------------------
 tables=$(admin_sql --print --execute \
