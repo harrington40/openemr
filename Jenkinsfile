@@ -114,9 +114,11 @@ pipeline {
                 dir('interface/new') {
                     sh '''
                         set -e
+                        # pipefail so a failing vitest run is not masked by tee.
+                        set -o pipefail
 
                         echo "Running New UI tests..."
-                        npm run test -- --run
+                        npm run test -- --run 2>&1 | tee "$WORKSPACE/new-ui-test.log"
                     '''
                 }
             }
@@ -376,7 +378,7 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
             // Keep the backend log and the pytest report around: without them a
             // failed build says only that some step returned non-zero.
             archiveArtifacts(
-                artifacts: 'backend-test-server.log, tests/api-tests/pytest-results.xml',
+                artifacts: 'new-ui-test.log, backend-test-server.log, tests/api-tests/pytest-results.xml',
                 allowEmptyArchive: true,
                 fingerprint: false,
             )
