@@ -114,11 +114,35 @@ pipeline {
                 dir('interface/new') {
                     sh '''
                         set -e
-                        # pipefail so a failing vitest run is not masked by tee.
-                        set -o pipefail
 
                         echo "Running New UI tests..."
-                        npm run test -- --run 2>&1 | tee "$WORKSPACE/new-ui-test.log"
+                        echo "[new-ui] node $(node --version), npm $(npm --version)"
+
+                        # No pipeline here on purpose. Jenkins runs these blocks
+                        # with /bin/sh, which is dash on Ubuntu, and dash has no
+                        # `set -o pipefail` (it aborts with "Illegal option").
+                        # Without pipefail a pipe would report tee's exit status
+                        # and hide a failing vitest run, so the output goes to a
+                        # file and the status is captured directly instead.
+                        #
+                        # --no-file-parallelism: vitest otherwise runs every test
+                        # file in parallel, and the jsdom workers made this the
+                        # heaviest step in the pipeline (42s wall / 237s CPU).
+                        # On the agent it was killed mid-run with no summary
+                        # line, which is the signature of the kernel OOM killer
+                        # rather than a failing test. Serialising the files costs
+                        # wall-clock time (about 2m50s here) but uses far less
+                        # memory.
+                        status=0
+                        npm run test -- --run --no-file-parallelism > "$WORKSPACE/new-ui-test.log" 2>&1 || status=$?
+
+                        cat "$WORKSPACE/new-ui-test.log"
+
+                        if [ "$status" -ne 0 ]; then
+                            echo "[new-ui] vitest exited with code $status"
+                            echo "[new-ui] 137 = killed (usually OOM), 134 = crashed, 1 = failing tests"
+                            exit "$status"
+                        fi
                     '''
                 }
             }
