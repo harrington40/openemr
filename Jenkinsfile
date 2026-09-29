@@ -45,6 +45,14 @@ pipeline {
         // administrative database credentials at all: TEST_DB_USER alone must
         // hold ALL PRIVILEGES on TEST_DB_NAME.
         TEST_DB_MANAGED = "${env.TEST_DB_MANAGED ?: 'false'}"
+
+        // Set TEST_DB_SSH_TUNNEL=dev@host when the database lives on another
+        // machine and only listens on its loopback interface — which is how the
+        // production MariaDB is configured, so it is unreachable directly. The
+        // pipeline then forwards a local port to it and DB_HOST stays
+        // 127.0.0.1. Leave empty to skip the tunnel entirely.
+        TEST_DB_SSH_TUNNEL = "${env.TEST_DB_SSH_TUNNEL ?: ''}"
+        TEST_DB_TUNNEL_PORT = "${env.TEST_DB_TUNNEL_PORT ?: '13306'}"
     }
 
     stages {
@@ -234,6 +242,48 @@ pipeline {
          * instead of relying on an installed server.
          */
 
+        stage('Backend - Open Test DB Tunnel') {
+            // Only runs when TEST_DB_SSH_TUNNEL is set, so it is inert for a
+            // local or containerised database.
+            when { expression { return env.TEST_DB_SSH_TUNNEL?.trim() } }
+            steps {
+                sh '''
+                    set -e
+
+                    TUNNEL_LOG="$WORKSPACE/test-db-tunnel.log"
+                    TUNNEL_PID_FILE="$WORKSPACE/test-db-tunnel.pid"
+
+                    echo "Forwarding 127.0.0.1:$TEST_DB_TUNNEL_PORT to $TEST_DB_SSH_TUNNEL (its own 127.0.0.1:3306)"
+
+                    # Backgrounded rather than using `ssh -f` so the PID is known
+                    # and post { always } can close it deterministically.
+                    # ExitOnForwardFailure makes ssh fail loudly instead of
+                    # silently continuing without the forward. Everything is on
+                    # one line: these blocks run under /bin/sh (dash), and a
+                    # backslash-continuation inside a Groovy triple-quoted string
+                    # is not reliable.
+                    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -L "$TEST_DB_TUNNEL_PORT:127.0.0.1:3306" "$TEST_DB_SSH_TUNNEL" > "$TUNNEL_LOG" 2>&1 &
+                    echo $! > "$TUNNEL_PID_FILE"
+
+                    TUNNEL_PID="$(cat "$TUNNEL_PID_FILE")"
+                    sleep 3
+
+                    # No /dev/tcp or nc here: /dev/tcp is a bash feature and dash
+                    # does not have it. ExitOnForwardFailure means a failed
+                    # forward kills ssh, so checking that it is still running is
+                    # enough, and the ssh error is printed when it is not.
+                    if ! kill -0 "$TUNNEL_PID" 2>/dev/null; then
+                        echo "ssh exited before the tunnel was established:"
+                        cat "$TUNNEL_LOG"
+                        echo "(the Jenkins user needs an SSH key accepted by $TEST_DB_SSH_TUNNEL)"
+                        exit 1
+                    fi
+
+                    echo "tunnel established (pid $TUNNEL_PID)"
+                '''
+            }
+        }
+
         stage('Backend - Provision Test Database') {
             steps {
                 sh '''
@@ -326,15 +376,17 @@ pipeline {
 
                     API_URL="http://localhost:$TEST_API_PORT/api"
 
-                    # App boot has been observed around 50s on a loaded machine,
-                    # so allow generous headroom before declaring failure.
+                    # A remote database makes startup slower: every service's
+                    # ensure-schema pass is a chain of network round trips, and
+                    # booting against a database at the end of an SSH tunnel was
+                    # measured at ~80s.
                     echo "Waiting for $API_URL/config ..."
-                    for i in $(seq 1 150); do
+                    for i in $(seq 1 300); do
                         if curl -fsS "$API_URL/config" >/dev/null 2>&1; then
                             echo "Backend is up after ${i}s"
                             break
                         fi
-                        if [ "$i" -eq 150 ]; then
+                        if [ "$i" -eq 300 ]; then
                             echo "Backend failed to start; last log lines:"
                             tail -40 "$BACKEND_LOG"
                             exit 1
@@ -406,6 +458,15 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
                 allowEmptyArchive: true,
                 fingerprint: false,
             )
+
+            // Close the SSH tunnel, if the tunnel stage opened one.
+            sh '''
+                if [ -f "$WORKSPACE/test-db-tunnel.pid" ]; then
+                    kill "$(cat "$WORKSPACE/test-db-tunnel.pid")" 2>/dev/null || true
+                    rm -f "$WORKSPACE/test-db-tunnel.pid"
+                    echo "test db tunnel closed"
+                fi
+            '''
 
             // Remove the disposable test database container, if one was used.
             // Guarded so it is harmless when docker is absent or the container

@@ -170,6 +170,45 @@ and set `TEST_DB_USER=openemr` / `TEST_DB_PASSWORD=openemr`. That works, but the
 account can also read the production `openemr` schema, so `--managed` prints a
 warning instead of failing the isolation check. A dedicated user is preferred.
 
+### Database on another server (SSH tunnel)
+
+The production MariaDB listens on **127.0.0.1 only** and every account is
+`@localhost`, so a CI host cannot reach it directly — and exposing a medical
+database on 3306 is not an acceptable alternative. Forward it instead:
+
+| Variable | Value |
+| --- | --- |
+| `TEST_DB_SSH_TUNNEL` | `dev@94.250.201.58` |
+| `TEST_DB_TUNNEL_PORT` | `13306` |
+| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `13306` |
+| `TEST_DB_MANAGED` | `true` |
+| `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` |
+
+The pipeline opens the forward before provisioning and closes it in
+`post { always }`. The Jenkins user needs an SSH key that `TEST_DB_SSH_TUNNEL`
+accepts — if it does not, the stage prints ssh's own error.
+
+The one-time administrator SQL on that server (already applied on
+`94.250.201.58`) uses `@localhost`, because connections arriving through the
+tunnel come from the server's own loopback:
+
+```sql
+CREATE DATABASE IF NOT EXISTS openrx_test
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'openrx_test'@'localhost' IDENTIFIED BY 'openrx_test';
+GRANT ALL PRIVILEGES ON openrx_test.* TO 'openrx_test'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+Verified end to end through this tunnel: provisioning (288 tables), the e2e
+spec, and the API suite (426 passed, 138 skipped, 0 failed).
+
+> Be aware that this puts CI load on the production host. When it was set up,
+> `94.250.201.58` had ~660 MB of RAM available out of 8 GB (it also runs
+> mailcow), and startup against the tunnelled database took ~80s. A MariaDB on
+> the Jenkins host, or a disposable container, would keep that load off
+> production.
+
 ## Seeded credentials (test-only)
 
 | Username | Password | Role |

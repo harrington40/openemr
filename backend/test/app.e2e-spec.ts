@@ -4,6 +4,13 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AppModule } from '../src/app.module';
 
+// Booting the entire AppModule runs each service's ensure-schema pass, which is
+// a long chain of sequential round trips. Jest's 5s default is ample against a
+// local database but not against a remote one — when CI points the tests at a
+// database reached over the network, the beforeEach hook was timing out before
+// the application had finished starting.
+jest.setTimeout(120_000);
+
 describe('OpenRx application (e2e)', () => {
     let app: INestApplication<Server>;
 
