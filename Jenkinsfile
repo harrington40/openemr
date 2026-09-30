@@ -354,8 +354,8 @@ pipeline {
                             exit 1
                         }
                     done
-                    python3 -m pip --version >/dev/null 2>&1 || {
-                        echo "[api-tests] 'python3 -m pip' is unavailable - install python3-pip on the agent"
+                    python3 -m venv --help >/dev/null 2>&1 || {
+                        echo "[api-tests] 'python3 -m venv' is unavailable - install python3-venv on the agent"
                         exit 1
                     }
 
@@ -438,14 +438,22 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
 
                     echo "Running pytest against $API_URL"
                     cd tests/api-tests
-                    python3 -m pip install --quiet -r requirements.txt
+
+                    # A throwaway virtualenv, not the system Python: Ubuntu 24.04
+                    # ships /usr/lib/python3.12/EXTERNALLY-MANAGED, so a plain
+                    # `pip install` is refused outright.
+                    API_VENV="$WORKSPACE/.test-db-venv"
+                    python3 -m venv "$API_VENV"
+                    "$API_VENV/bin/python" -m pip install --quiet --upgrade pip
+                    "$API_VENV/bin/python" -m pip install --quiet -r requirements.txt
+
                     OPENRX_API_URL="$API_URL" \\
                     OPENRX_API_TOKEN="$TOKEN" \\
                     OPENRX_TEST_PATIENT_ID=1 \\
                     OPENRX_TEST_APPOINTMENT_ID=1 \\
                     OPENRX_TEST_PROVIDER_ID=2 \\
                     OPENRX_TEST_ADMIN_USER_ID=1 \\
-                    python3 -m pytest -v --junitxml=pytest-results.xml
+                    "$API_VENV/bin/python" -m pytest -v --junitxml=pytest-results.xml
                 '''
             }
         }
