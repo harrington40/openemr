@@ -117,82 +117,13 @@ pipeline {
 
         /*
          * ==========================================
-         * OPENEMR NEW UI
-         * ==========================================
-         */
-
-        stage('New UI - Install') {
-            steps {
-                dir('interface/new') {
-                    sh '''
-                        set -e
-
-                        echo "Installing New UI dependencies..."
-                        npm ci
-
-                        echo "Checking Node type definitions..."
-                        npm ls @types/node --depth=0 || true
-                    '''
-                }
-            }
-        }
-
-        stage('New UI - Test') {
-            steps {
-                dir('interface/new') {
-                    sh '''
-                        set -e
-
-                        echo "Running New UI tests..."
-                        echo "[new-ui] node $(node --version), npm $(npm --version)"
-
-                        # No pipeline here on purpose. Jenkins runs these blocks
-                        # with /bin/sh, which is dash on Ubuntu, and dash has no
-                        # `set -o pipefail` (it aborts with "Illegal option").
-                        # Without pipefail a pipe would report tee's exit status
-                        # and hide a failing vitest run, so the output goes to a
-                        # file and the status is captured directly instead.
-                        #
-                        # --no-file-parallelism: vitest otherwise runs every test
-                        # file in parallel, and the jsdom workers made this the
-                        # heaviest step in the pipeline (42s wall / 237s CPU).
-                        # On the agent it was killed mid-run with no summary
-                        # line, which is the signature of the kernel OOM killer
-                        # rather than a failing test. Serialising the files costs
-                        # wall-clock time (about 2m50s here) but uses far less
-                        # memory.
-                        status=0
-                        npm run test -- --run --no-file-parallelism > "$WORKSPACE/new-ui-test.log" 2>&1 || status=$?
-
-                        cat "$WORKSPACE/new-ui-test.log"
-
-                        if [ "$status" -ne 0 ]; then
-                            echo "[new-ui] vitest exited with code $status"
-                            echo "[new-ui] 137 = killed (usually OOM), 134 = crashed, 1 = failing tests"
-                            exit "$status"
-                        fi
-                    '''
-                }
-            }
-        }
-
-        stage('New UI - Build') {
-            steps {
-                dir('interface/new') {
-                    sh '''
-                        set -e
-
-                        echo "Building OpenEMR New UI..."
-                        npm run build
-                    '''
-                }
-            }
-        }
-
-        /*
-         * ==========================================
          * OPENEMR BACKEND
          * ==========================================
+         * This pipeline concerns backend/ only: that is the application which is
+         * built, deployed, run and tested here. The React SPA in interface/new
+         * (which builds into the repository-root public/dist) is deliberately
+         * excluded — build and ship it separately, as
+         * deploy/deploy-local.sh --frontend does.
          */
 
         stage('Backend - Install') {
@@ -564,7 +495,7 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
             // Keep the backend log and the pytest report around: without them a
             // failed build says only that some step returned non-zero.
             archiveArtifacts(
-                artifacts: 'new-ui-test.log, backend-test-server.log, tests/api-tests/pytest-results.xml',
+                artifacts: 'backend-test-server.log, tests/api-tests/pytest-results.xml',
                 allowEmptyArchive: true,
                 fingerprint: false,
             )
