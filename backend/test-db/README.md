@@ -179,11 +179,19 @@ database on 3306 is not an acceptable alternative. Forward it instead:
 | Variable | Value |
 | --- | --- |
 | `TEST_DB_SSH_TUNNEL` | `dev@94.250.201.58` |
-| `TEST_DB_TUNNEL_PORT` | `13306` |
+| `TEST_DB_TUNNEL_PORT` | `13307` (local port for the forward — see below) |
 | `TEST_DB_SSH_KEY` | *(optional)* path to the private key, if it is not one of the Jenkins user's default identities |
-| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `13306` |
+| `DB_HOST` / `DB_PORT` | `127.0.0.1` / `13307` |
 | `TEST_DB_MANAGED` | `true` |
 | `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` |
+
+The local port must be one that nothing else on the CI host is using. `13306`
+looks like the natural choice but is **not** free on the Jenkins host: a MariaDB
+container is already published there on `127.0.0.1:13306`, and it is a different
+server from the intended one (`10.11.15-MariaDB-ubu2204` versus `94.250.201.58`'s
+`10.11.14-MariaDB-0ubuntu0.24.04.1`). A forward that cannot bind silently leaves
+the suites talking to that container instead, so the pipeline probes the port
+first and refuses to continue when something already answers there.
 
 The pipeline opens the forward before provisioning and closes it in
 `post { always }`. The Jenkins user needs an SSH key that `TEST_DB_SSH_TUNNEL`
