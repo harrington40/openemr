@@ -417,6 +417,14 @@ req = urllib.request.Request(
 print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
 ")"
 
+                    if [ -z "$TOKEN" ]; then
+                        echo "[api-tests] login returned no token."
+                        echo "[api-tests] Every authenticated test would be SKIPPED and the"
+                        echo "[api-tests] build would still look green, so stop here instead."
+                        exit 1
+                    fi
+                    echo "[api-tests] obtained a token (${#TOKEN} characters)"
+
                     echo "Running pytest against $API_URL"
                     cd tests/api-tests
                     python3 -m pip install --quiet -r requirements.txt
