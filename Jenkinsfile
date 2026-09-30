@@ -15,7 +15,7 @@ pipeline {
         /*
          * Test database connection.
          *
-         * Tests NEVER run against the production schema. `test-db/setup-test-db.sh`
+         * Tests NEVER run against the production schema. `backend/test-db/setup-test-db.sh`
          * builds a throwaway schema from repository assets (sql/database.sql +
          * patches + synthetic seed) and grants a dedicated user access to that
          * schema only, so a misconfigured build cannot read patient data.
@@ -185,7 +185,7 @@ pipeline {
          * These run against a throwaway schema built from repository assets,
          * never against production.
          *
-         * SQL is executed with Node via test-db/run-sql.mjs and the backend's
+         * SQL is executed with Node via backend/test-db/run-sql.mjs and the backend's
          * own mysql2 dependency, so the agent does NOT need a `mysql` client.
          * Pre-requisites: Node (already installed by the earlier stages), a
          * MariaDB reachable at DB_HOST:DB_PORT, and python3 + pip for the API
@@ -254,11 +254,11 @@ pipeline {
                     # core.fileMode=false, so the executable bit is unreliable
                     # in checkouts.
                     if [ "${TEST_DB_USE_DOCKER:-false}" = "true" ]; then
-                        bash ./test-db/setup-test-db.sh --docker
+                        bash ./backend/test-db/setup-test-db.sh --docker
                     elif [ "${TEST_DB_MANAGED:-false}" = "true" ]; then
-                        bash ./test-db/setup-test-db.sh --managed
+                        bash ./backend/test-db/setup-test-db.sh --managed
                     else
-                        bash ./test-db/setup-test-db.sh
+                        bash ./backend/test-db/setup-test-db.sh
                     fi
                 '''
             }
@@ -396,7 +396,7 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
                     echo "[api-tests] obtained a token (${#TOKEN} characters)"
 
                     echo "Running pytest against $API_URL"
-                    cd tests/api-tests
+                    cd backend/tests/api-tests
 
                     # Drop any report left in the workspace. A stale file that
                     # survives (or is checked out from an earlier commit) would
@@ -495,7 +495,7 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
             // Keep the backend log and the pytest report around: without them a
             // failed build says only that some step returned non-zero.
             archiveArtifacts(
-                artifacts: 'backend-test-server.log, tests/api-tests/pytest-results.xml',
+                artifacts: 'backend-test-server.log, backend/tests/api-tests/pytest-results.xml',
                 allowEmptyArchive: true,
                 fingerprint: false,
             )
