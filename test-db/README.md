@@ -201,7 +201,7 @@ FLUSH PRIVILEGES;
 ```
 
 Verified end to end through this tunnel: provisioning (288 tables), the e2e
-spec, and the API suite (426 passed, 138 skipped, 0 failed).
+spec, and the API suite (totals below).
 
 > Be aware that this puts CI load on the production host. When it was set up,
 > `94.250.201.58` had ~660 MB of RAM available out of 8 GB (it also runs
@@ -211,10 +211,19 @@ spec, and the API suite (426 passed, 138 skipped, 0 failed).
 
 ## Seeded credentials (test-only)
 
-| Username | Password | Role |
+All five accounts share the password `OpenRxTest123`.
+
+| Username | Role | State |
 | --- | --- | --- |
-| `admin` | `OpenRxTest123` | administrator |
-| `dr.test` | `OpenRxTest123` | physician |
+| `admin` | administrator | approved — can log in |
+| `dr.test` | physician | approved — can log in |
+| `pending.user` | physician | awaiting approval — **must not** log in |
+| `rejected.user` | physician | registration refused — **must not** log in |
+| `inactive.user` | physician | approved then deactivated — **must not** log in |
+
+The last three exist so the authentication tests can prove every refusal path
+without creating anything: `login()` only reads (`users` and `users_secure`), it
+never touches the failure counters, so none of those cases can lock an account.
 
 Seeded patient ids: `1`, `2`, `3`. Appointment id: `1`.
 
@@ -236,7 +245,8 @@ reachable at `DB_HOST:DB_PORT`, and `python3` + `pip` for the API suite. No
 > Linux host port publishing works, but treat that path as untested.
 
 Verified locally end to end: backend boots against the fresh schema with no
-warnings, and the API suite reports **426 passed, 138 skipped, 0 failed**.
+warnings, and the API suite reports **440 passed, 134 skipped, 0 failed**
+(359 passed without a token, since the authenticated tests then skip).
 
 ## Adding data for more tests
 

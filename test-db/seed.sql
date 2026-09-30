@@ -22,31 +22,71 @@
 -- ---------------------------------------------------------------------------
 -- Staff accounts
 -- ---------------------------------------------------------------------------
--- OpenEMR stores uuids as binary(16), so the text form is hex-decoded here.
-INSERT INTO users (id, uuid, username, fname, lname, title, specialty, active,
+-- Every account is inserted BY USERNAME, never by id. `users.id` is
+-- AUTO_INCREMENT and may already hold rows the application created
+-- (inventory.manager, for one), so supplying an id made ON DUPLICATE KEY UPDATE
+-- silently overwrite an unrelated account — and left users_secure attached to
+-- the wrong username. `username` has no unique index either, hence the explicit
+-- NOT EXISTS guard that keeps this file re-runnable.
+--
+-- OpenEMR stores uuids as binary(16), hence the hex decode.
+--
+-- Password for all five accounts is OpenRxTest123 (bcrypt, cost 10). Test-only.
+--   admin          approved administrator
+--   dr.test        approved physician
+--   pending.user   awaiting approval   | these three must NOT be able to log in,
+--   rejected.user  registration refused| and the authentication tests assert
+--   inactive.user  approved, disabled  | exactly that
+INSERT INTO users (uuid, username, fname, lname, title, specialty, active,
                    authorized, main_menu_role, calendar_color,
                    registration_status, can_edit_providers, can_view_charts,
                    can_edit_charges)
-VALUES
-    (1, UNHEX(REPLACE('10000000-0000-0000-0000-000000000001', '-', '')),
-     'admin',   'Ada',   'Administrator',
-     'System Administrator', 'Administrative', 1, 1, 'admin', '#0d6efd',
-     'approved', 1, 1, 1),
-    (2, UNHEX(REPLACE('10000000-0000-0000-0000-000000000002', '-', '')),
-     'dr.test', 'Dana', 'Test',
-     'MD', 'Family Medicine', 1, 1, 'physician', '#198754',
-     'approved', 0, 1, 0)
-ON DUPLICATE KEY UPDATE
-    username = VALUES(username),
-    active = VALUES(active),
-    registration_status = VALUES(registration_status);
+SELECT UNHEX(REPLACE('10000000-0000-0000-0000-000000000001', '-', '')),
+       'admin', 'Ada', 'Administrator', 'System Administrator', 'Administrative',
+       1, 1, 'admin', '#0d6efd', 'approved', 1, 1, 1
+FROM (SELECT 1) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE BINARY username = 'admin');
 
--- Passwords: bcrypt hash of 'OpenRxTest123', generated with bcryptjs (cost 10).
+INSERT INTO users (uuid, username, fname, lname, title, specialty, active,
+                   authorized, main_menu_role, calendar_color,
+                   registration_status, can_edit_providers, can_view_charts,
+                   can_edit_charges)
+SELECT UNHEX(REPLACE('10000000-0000-0000-0000-000000000002', '-', '')),
+       'dr.test', 'Dana', 'Test', 'MD', 'Family Medicine',
+       1, 1, 'physician', '#198754', 'approved', 0, 1, 0
+FROM (SELECT 1) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE BINARY username = 'dr.test');
+
+INSERT INTO users (uuid, username, fname, lname, active, authorized,
+                   main_menu_role, registration_status)
+SELECT UNHEX(REPLACE('10000000-0000-0000-0000-000000000003', '-', '')),
+       'pending.user', 'Pat', 'Pending', 0, 0, 'standard', 'pending'
+FROM (SELECT 1) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE BINARY username = 'pending.user');
+
+INSERT INTO users (uuid, username, fname, lname, active, authorized,
+                   main_menu_role, registration_status)
+SELECT UNHEX(REPLACE('10000000-0000-0000-0000-000000000004', '-', '')),
+       'rejected.user', 'Rita', 'Rejected', 0, 0, 'standard', 'rejected'
+FROM (SELECT 1) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE BINARY username = 'rejected.user');
+
+INSERT INTO users (uuid, username, fname, lname, active, authorized,
+                   main_menu_role, registration_status)
+SELECT UNHEX(REPLACE('10000000-0000-0000-0000-000000000005', '-', '')),
+       'inactive.user', 'Ivan', 'Inactive', 0, 0, 'standard', 'approved'
+FROM (SELECT 1) AS seed
+WHERE NOT EXISTS (SELECT 1 FROM users WHERE BINARY username = 'inactive.user');
+
+-- users_secure keys on the same id, so resolve it from the username rather than
+-- assuming one.
 INSERT INTO users_secure (id, username, password)
-VALUES
-    (1, 'admin',   '$2b$10$Mm8e/7WUxhNWBXuSb70VF.Rfm3J6RFepf4dXMMiqQkH4PCI5Lc4CS'),
-    (2, 'dr.test', '$2b$10$Mm8e/7WUxhNWBXuSb70VF.Rfm3J6RFepf4dXMMiqQkH4PCI5Lc4CS')
-ON DUPLICATE KEY UPDATE username = VALUES(username);
+SELECT id, username,
+       '$2b$10$Mm8e/7WUxhNWBXuSb70VF.Rfm3J6RFepf4dXMMiqQkH4PCI5Lc4CS'
+FROM users
+WHERE BINARY username IN
+      ('admin', 'dr.test', 'pending.user', 'rejected.user', 'inactive.user')
+ON DUPLICATE KEY UPDATE password = VALUES(password);
 
 -- ---------------------------------------------------------------------------
 -- Patients

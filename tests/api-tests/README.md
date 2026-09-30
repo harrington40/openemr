@@ -55,8 +55,9 @@ python generate_api_routes.py
 
 | Variable | Effect |
 | --- | --- |
-| `OPENRX_API_URL` | API base URL, including the `/api` prefix. Defaults to the production URL. |
-| `OPENRX_API_TOKEN` | Staff JWT. Without it, every `@authenticated` test skips. |
+| `OPENRX_API_URL` | API base URL, including the `/api` prefix. Defaults to the local test backend (`http://localhost:3202/api`) — never production. |
+| `OPENRX_API_TOKEN` | Staff JWT. Without it, every `@authenticated` test skips. The tests in `auth/` log in themselves and need no token. |
+| `OPENRX_TEST_USER` / `OPENRX_TEST_PASSWORD` | Credentials the authentication tests log in with. Default to the seeded `admin` / `OpenRxTest123`. |
 | `OPENRX_RUN_WRITES` | Set to `true` to stop skipping `production_write`/`destructive` tests. Leave unset unless you are pointed at a throwaway environment. |
 | `OPENRX_TEST_PATIENT_ID` | Patient id for patient-scoped tests. |
 | `OPENRX_TEST_ENCOUNTER_ID` | Encounter id for encounter tests. |
