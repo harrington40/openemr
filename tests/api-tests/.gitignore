@@ -1,4 +1,7 @@
-tests/api-tests/pytest-results.xml
+# pytest's report. The pattern is relative to THIS directory, so it must not be
+# prefixed with tests/api-tests/ — that never matched anything, which is how a
+# stale report ended up committed and archived on every build.
+pytest-results.xml
 
 # pytest / Python bytecode artifacts
 .pytest_cache/

@@ -439,6 +439,12 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
                     echo "Running pytest against $API_URL"
                     cd tests/api-tests
 
+                    # Drop any report left in the workspace. A stale file that
+                    # survives (or is checked out from an earlier commit) would
+                    # otherwise be archived as this run's result, which is
+                    # exactly how an old 106-test report kept reappearing.
+                    rm -f pytest-results.xml
+
                     # A throwaway virtualenv, not the system Python: Ubuntu 24.04
                     # ships /usr/lib/python3.12/EXTERNALLY-MANAGED, so a plain
                     # `pip install` is refused outright.
