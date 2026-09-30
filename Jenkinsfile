@@ -53,6 +53,9 @@ pipeline {
         // 127.0.0.1. Leave empty to skip the tunnel entirely.
         TEST_DB_SSH_TUNNEL = "${env.TEST_DB_SSH_TUNNEL ?: ''}"
         TEST_DB_TUNNEL_PORT = "${env.TEST_DB_TUNNEL_PORT ?: '13306'}"
+        // Optional path to the private key the tunnel should use. Leave empty to
+        // use the Jenkins user's default identities.
+        TEST_DB_SSH_KEY = "${env.TEST_DB_SSH_KEY ?: ''}"
     }
 
     stages {
@@ -253,6 +256,14 @@ pipeline {
                     TUNNEL_LOG="$WORKSPACE/test-db-tunnel.log"
                     TUNNEL_PID_FILE="$WORKSPACE/test-db-tunnel.pid"
 
+                    # Optional explicit identity file, for when the Jenkins user's
+                    # default keys are not the ones authorised on the DB host:
+                    # TEST_DB_SSH_KEY=/root/.ssh/openrx-test-db
+                    TUNNEL_KEY_OPT=""
+                    if [ -n "${TEST_DB_SSH_KEY:-}" ]; then
+                        TUNNEL_KEY_OPT="-i $TEST_DB_SSH_KEY"
+                    fi
+
                     echo "Forwarding 127.0.0.1:$TEST_DB_TUNNEL_PORT to $TEST_DB_SSH_TUNNEL (its own 127.0.0.1:3306)"
 
                     # Backgrounded rather than using `ssh -f` so the PID is known
@@ -262,7 +273,7 @@ pipeline {
                     # one line: these blocks run under /bin/sh (dash), and a
                     # backslash-continuation inside a Groovy triple-quoted string
                     # is not reliable.
-                    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new -L "$TEST_DB_TUNNEL_PORT:127.0.0.1:3306" "$TEST_DB_SSH_TUNNEL" > "$TUNNEL_LOG" 2>&1 &
+                    setsid nohup ssh -N -o BatchMode=yes -o ExitOnForwardFailure=yes -o StrictHostKeyChecking=accept-new $TUNNEL_KEY_OPT -L "$TEST_DB_TUNNEL_PORT:127.0.0.1:3306" "$TEST_DB_SSH_TUNNEL" > "$TUNNEL_LOG" 2>&1 &
                     echo $! > "$TUNNEL_PID_FILE"
 
                     TUNNEL_PID="$(cat "$TUNNEL_PID_FILE")"

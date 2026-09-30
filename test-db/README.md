@@ -180,6 +180,7 @@ database on 3306 is not an acceptable alternative. Forward it instead:
 | --- | --- |
 | `TEST_DB_SSH_TUNNEL` | `dev@94.250.201.58` |
 | `TEST_DB_TUNNEL_PORT` | `13306` |
+| `TEST_DB_SSH_KEY` | *(optional)* path to the private key, if it is not one of the Jenkins user's default identities |
 | `DB_HOST` / `DB_PORT` | `127.0.0.1` / `13306` |
 | `TEST_DB_MANAGED` | `true` |
 | `TEST_DB_USER` / `TEST_DB_PASSWORD` | `openrx_test` / `openrx_test` |
