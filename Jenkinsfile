@@ -56,6 +56,23 @@ pipeline {
         // Optional path to the private key the tunnel should use. Leave empty to
         // use the Jenkins user's default identities.
         TEST_DB_SSH_KEY = "${env.TEST_DB_SSH_KEY ?: ''}"
+
+        /*
+         * Backend deployment (see the 'Backend - Deploy' stage).
+         *
+         * DEPLOY_BACKEND is deliberately off: this job runs on a 35-minute
+         * cron, so a default of true would push every commit straight to
+         * production. Set it to 'true' for a build you intend to release.
+         *
+         * DEPLOY_SSH_KEY points at a key owned by the `dev` account on this
+         * Jenkins host. The pipeline runs as root, which can read it; move the
+         * key into /root/.ssh and repoint this if you prefer.
+         */
+        DEPLOY_BACKEND = "${env.DEPLOY_BACKEND ?: 'false'}"
+        DEPLOY_SERVER = "${env.DEPLOY_SERVER ?: 'dev@94.250.201.58'}"
+        DEPLOY_REMOTE_DIR = "${env.DEPLOY_REMOTE_DIR ?: '/home/dev/openrx'}"
+        DEPLOY_KEEP = "${env.DEPLOY_KEEP ?: '3'}"
+        DEPLOY_SSH_KEY = "${env.DEPLOY_SSH_KEY ?: '/home/dev/.ssh/openrx-deploy'}"
     }
 
     stages {
@@ -327,14 +344,21 @@ pipeline {
                         # The e2e spec boots AppModule in-process, so it needs the
                         # DB_* environment rather than a running server.
                         #
+                        # Exported rather than prefixed onto one continued command:
+                        # a backslash-continuation inside a Groovy triple-quoted
+                        # string depends on Groovy's own escape handling, and the
+                        # failure mode when that goes wrong is silent — the
+                        # assignments become no-ops and the command runs with the
+                        # wrong environment.
+                        export DB_HOST="$DB_HOST"
+                        export DB_PORT="$DB_PORT"
+                        export DB_USERNAME="$TEST_DB_USER"
+                        export DB_PASSWORD="$TEST_DB_PASSWORD"
+                        export DB_DATABASE="$TEST_DB_NAME"
+                        export DB_LOGGING=false
+
                         # --forceExit: the MySQL pool and the socket.io gateway keep
                         # the event loop alive, so Jest never exits on its own.
-                        DB_HOST="$DB_HOST" \\
-                        DB_PORT="$DB_PORT" \\
-                        DB_USERNAME="$TEST_DB_USER" \\
-                        DB_PASSWORD="$TEST_DB_PASSWORD" \\
-                        DB_DATABASE="$TEST_DB_NAME" \\
-                        DB_LOGGING=false \\
                         npm run test:e2e -- --forceExit
                     '''
                 }
@@ -373,13 +397,17 @@ pipeline {
                     echo "Booting the backend against $TEST_DB_NAME on :$TEST_API_PORT"
                     (
                         cd backend
-                        PORT="$TEST_API_PORT" \\
-                        DB_HOST="$DB_HOST" \\
-                        DB_PORT="$DB_PORT" \\
-                        DB_USERNAME="$TEST_DB_USER" \\
-                        DB_PASSWORD="$TEST_DB_PASSWORD" \\
-                        DB_DATABASE="$TEST_DB_NAME" \\
-                        DB_LOGGING=false \\
+                        # Exported rather than prefixed with continuations. If the
+                        # continuation did not collapse, the app would start with
+                        # its own defaults instead - and would then be pointed at
+                        # a different database than the one just provisioned.
+                        export PORT="$TEST_API_PORT"
+                        export DB_HOST="$DB_HOST"
+                        export DB_PORT="$DB_PORT"
+                        export DB_USERNAME="$TEST_DB_USER"
+                        export DB_PASSWORD="$TEST_DB_PASSWORD"
+                        export DB_DATABASE="$TEST_DB_NAME"
+                        export DB_LOGGING=false
                         nohup node dist/main.js > "$BACKEND_LOG" 2>&1 &
                         echo $! > "$WORKSPACE/backend-test-server.pid"
                     )
@@ -453,13 +481,62 @@ print(json.load(urllib.request.urlopen(req, timeout=20))['token'])
                     "$API_VENV/bin/python" -m pip install --quiet --upgrade pip
                     "$API_VENV/bin/python" -m pip install --quiet -r requirements.txt
 
-                    OPENRX_API_URL="$API_URL" \\
-                    OPENRX_API_TOKEN="$TOKEN" \\
-                    OPENRX_TEST_PATIENT_ID=1 \\
-                    OPENRX_TEST_APPOINTMENT_ID=1 \\
-                    OPENRX_TEST_PROVIDER_ID=2 \\
-                    OPENRX_TEST_ADMIN_USER_ID=1 \\
+                    # Exported, not prefixed with continuations — see the e2e stage.
+                    export OPENRX_API_URL="$API_URL"
+                    export OPENRX_API_TOKEN="$TOKEN"
+                    export OPENRX_TEST_PATIENT_ID=1
+                    export OPENRX_TEST_APPOINTMENT_ID=1
+                    export OPENRX_TEST_PROVIDER_ID=2
+                    export OPENRX_TEST_ADMIN_USER_ID=1
+
                     "$API_VENV/bin/python" -m pytest -v --junitxml=pytest-results.xml
+                '''
+            }
+        }
+
+        /*
+         * ==========================================
+         * DEPLOY THE BACKEND APPLICATION
+         * ==========================================
+         * Ships the dist/ this build already produced, through the same
+         * server-side deploy.sh the manual flow uses, so the backup, the
+         * atomic swap and the pm2 restart behave identically.
+         *
+         * Opt in with DEPLOY_BACKEND=true — this job runs on a 35-minute cron,
+         * so deploying implicitly would push every commit straight to
+         * production. It is also the last stage on purpose: any failure above
+         * it skips the deploy.
+         */
+        stage('Backend - Deploy') {
+            when { expression { return env.DEPLOY_BACKEND == 'true' } }
+            steps {
+                sh '''
+                    set -e
+
+                    TARBALL="$WORKSPACE/openrx-backend-dist.tar.gz"
+
+                    # deploy.sh refuses a tarball without a top-level dist/, so
+                    # verify the build output before packaging.
+                    test -f backend/dist/main.js || {
+                        echo "[deploy] backend/dist/main.js is missing - the build did not run"
+                        exit 1
+                    }
+
+                    rm -f "$TARBALL"
+                    tar -czf "$TARBALL" -C backend dist
+                    echo "[deploy] packaged $(du -h "$TARBALL" | cut -f1)"
+
+                    # Word-split deliberately: SSH_OPTS is a list of arguments.
+                    SSH_OPTS="-i $DEPLOY_SSH_KEY -o BatchMode=yes -o StrictHostKeyChecking=accept-new"
+
+                    echo "[deploy] uploading to $DEPLOY_SERVER:$DEPLOY_REMOTE_DIR/incoming"
+                    ssh $SSH_OPTS "$DEPLOY_SERVER" "mkdir -p $DEPLOY_REMOTE_DIR/incoming"
+                    scp -q $SSH_OPTS "$TARBALL" "$DEPLOY_SERVER:$DEPLOY_REMOTE_DIR/incoming/"
+
+                    echo "[deploy] running the remote deploy"
+                    ssh $SSH_OPTS "$DEPLOY_SERVER" "cd $DEPLOY_REMOTE_DIR && ./deploy.sh --backend incoming/openrx-backend-dist.tar.gz --keep $DEPLOY_KEEP"
+
+                    echo "[deploy] backend deployed"
                 '''
             }
         }
