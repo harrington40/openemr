@@ -52,7 +52,11 @@ pipeline {
         // pipeline then forwards a local port to it and DB_HOST stays
         // 127.0.0.1. Leave empty to skip the tunnel entirely.
         TEST_DB_SSH_TUNNEL = "${env.TEST_DB_SSH_TUNNEL ?: ''}"
-        TEST_DB_TUNNEL_PORT = "${env.TEST_DB_TUNNEL_PORT ?: '13306'}"
+        // 13307 rather than the more obvious 13306: a MariaDB container is
+        // already published on 127.0.0.1:13306 on this host, and a tunnel that
+        // silently failed to bind would leave the tests talking to that
+        // container instead of the intended server.
+        TEST_DB_TUNNEL_PORT = "${env.TEST_DB_TUNNEL_PORT ?: '13307'}"
         // Optional path to the private key the tunnel should use. Leave empty to
         // use the Jenkins user's default identities.
         TEST_DB_SSH_KEY = "${env.TEST_DB_SSH_KEY ?: ''}"
@@ -203,6 +207,29 @@ pipeline {
 
                     TUNNEL_LOG="$WORKSPACE/test-db-tunnel.log"
                     TUNNEL_PID_FILE="$WORKSPACE/test-db-tunnel.pid"
+
+                    # Refuse to start if something already holds the port. On
+                    # this Jenkins host a MariaDB container (docker-proxy) is
+                    # published on 127.0.0.1:13306, and it serves a *different*
+                    # database — binding over it, or connecting through it by
+                    # mistake, would run the whole suite against the wrong
+                    # server without saying so.
+                    python3 - "$TEST_DB_TUNNEL_PORT" <<'PY'
+import socket, sys
+port = int(sys.argv[1])
+probe = socket.socket()
+probe.settimeout(2)
+try:
+    probe.connect(('127.0.0.1', port))
+except (ConnectionRefusedError, socket.timeout, OSError):
+    sys.exit(0)
+else:
+    print(f'[tunnel] port {port} is ALREADY IN USE on this host.')
+    print('[tunnel] whatever is listening there would answer the tests instead.')
+    sys.exit(1)
+finally:
+    probe.close()
+PY
 
                     # Optional explicit identity file, for when the Jenkins user's
                     # default keys are not the ones authorised on the DB host:
